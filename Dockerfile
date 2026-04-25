@@ -1,5 +1,5 @@
 # ── Stage 1: dependency builder ───────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
@@ -14,7 +14,7 @@ RUN pip install --upgrade pip \
 
 
 # ── Stage 2: lean runtime image ───────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.11-slim AS runtime
 
 # Non-root user for Cloud Run security best practices
 RUN groupadd -r ktt && useradd -r -g ktt ktt
