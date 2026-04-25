@@ -52,26 +52,26 @@ GEMINI_MODEL = "models/gemini-2.0-flash"
 
 import os
 import json
+import firebase_admin
 from firebase_admin import credentials
 
 def init_firebase():
     database_url = os.environ.get("FIREBASE_DATABASE_URL")
-
     service_account_env = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
 
-    if service_account_env and service_account_env.strip().startswith("{"):
-        # ✅ JSON string from Render
+    if service_account_env:
+        # ✅ JSON from Railway env
         service_account_info = json.loads(service_account_env)
         cred = credentials.Certificate(service_account_info)
     else:
-        # ✅ Local file fallback
+        # ❌ fallback (won’t work on Railway)
         cred = credentials.Certificate("serviceAccount.json")
 
     firebase_admin.initialize_app(cred, {
         "databaseURL": database_url
     })
 
-    print("Firebase initialized")
+    print("Firebase initialized ✅")
 
 
 def init_gemini() -> genai.GenerativeModel:
