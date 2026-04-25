@@ -509,7 +509,7 @@ if __name__ == "__main__":
 
 from flask import Flask
 import threading
-
+import os
 app = Flask(__name__)
 
 @app.route("/")
@@ -521,4 +521,5 @@ def run_worker():
 
 if __name__ == "__main__":
     threading.Thread(target=run_worker).start()
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
