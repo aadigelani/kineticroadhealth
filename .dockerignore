@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.env
+.env.*
+serviceAccount.json
+*.local
+tests/
+README.md
+deploy.sh
+cloudbuild.yaml

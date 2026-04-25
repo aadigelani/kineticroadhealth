@@ -1,0 +1,68 @@
+# cloudbuild.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+# Google Cloud Build pipeline for Kinetic Transport Tracker — Python Bridge
+#
+# Triggered automatically on push to `main` branch (configure in Cloud Console
+# under Cloud Build → Triggers, or via the gcloud CLI in deploy.sh).
+#
+# Required substitution variables (set in the Trigger config):
+#   _REGION          e.g. asia-south1
+#   _SERVICE_NAME    e.g. ktt-bridge
+#   _PROJECT_ID      your GCP project ID
+# ─────────────────────────────────────────────────────────────────────────────
+
+substitutions:
+  _REGION:       asia-south1          # Chennai/Mumbai — closest GCP region to Tamil Nadu
+  _SERVICE_NAME: ktt-bridge
+  _IMAGE:        gcr.io/$PROJECT_ID/${_SERVICE_NAME}
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+
+  # ── 1. Build the Docker image ──────────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: build
+    args:
+      - build
+      - --tag=${_IMAGE}:$SHORT_SHA
+      - --tag=${_IMAGE}:latest
+      - --cache-from=${_IMAGE}:latest
+      - .
+
+  # ── 2. Push both tags to Container Registry ────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: push
+    waitFor: [build]
+    args:
+      - push
+      - --all-tags
+      - ${_IMAGE}
+
+  # ── 3. Deploy to Cloud Run ─────────────────────────────────────────────────
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy
+    waitFor: [push]
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE_NAME}
+      - --image=${_IMAGE}:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --no-allow-unauthenticated        # bridge is internal — no public HTTP
+      - --min-instances=1                 # keep 1 warm to avoid listener cold-start
+      - --max-instances=3
+      - --memory=512Mi
+      - --cpu=1
+      - --timeout=3600                    # long-running Firebase listener
+      - --set-env-vars=FIREBASE_DATABASE_URL=$$FIREBASE_DATABASE_URL
+      - --set-secrets=/secrets/serviceAccount.json=firebase-service-account:latest
+      - --set-secrets=GEMINI_API_KEY=gemini-api-key:latest
+      - --service-account=ktt-bridge-sa@$PROJECT_ID.iam.gserviceaccount.com
+
+images:
+  - ${_IMAGE}:$SHORT_SHA
+  - ${_IMAGE}:latest

@@ -1,0 +1,5 @@
+# Kinetic Transport Tracker — Python Bridge
+# Install: pip install -r requirements.txt
+
+firebase-admin==6.5.0
+google-generativeai==0.7.2

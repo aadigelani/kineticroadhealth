@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kinetic Transport Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+<script src="config.js"></script>
+<!-- Firebase -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+ const firebaseConfig = {
+    apiKey: "AIzaSyB6vPfn4_bNQ2_j97HBRIL2JpFs9PJl9L0",
+    authDomain: "road-health-monitor-b6307.firebaseapp.com",
+    databaseURL: "https://road-health-monitor-b6307-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "road-health-monitor-b6307",
+    storageBucket: "road-health-monitor-b6307.firebasestorage.app",
+    messagingSenderId: "1089601213267",
+    appId: "1:1089601213267:web:cbabe13072bac0a5fd87a6",
+    measurementId: "G-TL23L61TXV"
+  };
+let db = null;
+
+try {
+  const app = initializeApp(firebaseConfig);
+
+  // ✅ init services
+  db = getDatabase(app);
+  const auth = getAuth(app);
+
+  // ✅ auth FIRST
+  signInAnonymously(auth)
+    .then(() => {
+      console.log("Firebase anonymous auth success");
+
+      // ✅ expose AFTER auth
+      window.__firebaseReady = { db, ref, onValue };
+    })
+    .catch(err => console.error("Auth failed", err));
+
+} catch(e) {
+  console.warn("Firebase not configured — using demo data");
+}
+</script>
+
+<style>
+/* ── RESET & BASE ──────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg-void: #020509;
+  --bg-base: #060d14;
+  --bg-panel: rgba(8, 18, 30, 0.92);
+  --bg-card: rgba(12, 24, 40, 0.85);
+  --bg-glass: rgba(14, 30, 50, 0.6);
+  --border: rgba(0, 180, 255, 0.10);
+  --border-bright: rgba(0, 180, 255, 0.25);
+  --accent-cyan: #00b4ff;
+  --accent-cyan-dim: rgba(0, 180, 255, 0.15);
+  --accent-green: #00ff88;
+  --accent-amber: #ffb800;
+  --accent-red: #ff3b3b;
+  --sev-green: #00e676;
+  --sev-yellow: #ffea00;
+  --sev-red: #ff1744;
+  --text-primary: #e8f4ff;
+  --text-secondary: rgba(180, 220, 255, 0.65);
+  --text-muted: rgba(120, 170, 210, 0.45);
+  --font-display: 'Syne', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --scan-speed: 3s;
+}
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-void); color: var(--text-primary); font-family: var(--font-display); }
+
+/* ── SCANLINE OVERLAY ──────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 4px);
+}
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 9998; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 0%, rgba(0,100,200,0.08) 0%, transparent 70%),
+              radial-gradient(ellipse at 50% 100%, rgba(0,30,80,0.4) 0%, transparent 70%);
+}
+
+/* ── LAYOUT ──────────────────────────────────────────────── */
+#app {
+  display: flex; flex-direction: column; width: 100%; height: 100vh;
+}
+#topbar {
+  flex-shrink: 0; height: 56px;
+  display: flex; align-items: center; gap: 16px; padding: 0 20px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  position: relative; z-index: 10;
+}
+#content {
+  flex: 1; display: flex; overflow: hidden;
+}
+#map-container {
+  flex: 0 0 70%; position: relative; background: var(--bg-base);
+  border-right: 1px solid var(--border);
+}
+#sidebar {
+  flex: 0 0 30%; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--bg-panel);
+}
+
+/* ── TOPBAR ──────────────────────────────────────────────── */
+.logo-mark {
+  width: 32px; height: 32px; position: relative; flex-shrink: 0;
+}
+.logo-mark svg { width: 100%; height: 100%; }
+.logo-text {
+  font-size: 14px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-primary);
+}
+.logo-text span { color: var(--accent-cyan); }
+.topbar-divider { width: 1px; height: 24px; background: var(--border-bright); margin: 0 4px; }
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px var(--accent-green);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.status-label { font-size: 11px; font-family: var(--font-mono); color: var(--accent-green); letter-spacing: 0.08em; }
+.topbar-stats { display: flex; gap: 24px; margin-left: auto; }
+.tstat { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.tstat-val { font-size: 15px; font-weight: 700; font-family: var(--font-mono); color: var(--text-primary); }
+.tstat-lbl { font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); letter-spacing: 0.1em; text-transform: uppercase; }
+.time-display { font-family: var(--font-mono); font-size: 12px; color: var(--accent-cyan); letter-spacing: 0.1em; }
+
+/* ── MAP ─────────────────────────────────────────────────── */
+#map { width: 100%; height: 100%; }
+.map-overlay-text {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; pointer-events: none;
+  z-index: 2;
+}
+.map-placeholder {
+  position: absolute; inset: 0; z-index: 1;
+  background: #060d14;
+  display: flex; align-items: center; justify-content: center;
+}
+.map-grid {
+  position: absolute; inset: 0; overflow: hidden;
+}
+.map-grid::before, .map-grid::after {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,180,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,180,255,0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+.map-grid::after {
+  background-image:
+    linear-gradient(rgba(0,180,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,180,255,0.015) 1px, transparent 1px);
+  background-size: 12px 12px;
+}
+
+/* ── MAP CONTROLS ────────────────────────────────────────── */
+#map-controls {
+  position: absolute; bottom: 16px; left: 16px; z-index: 100;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.map-btn {
+  width: 36px; height: 36px;
+  background: var(--bg-card); border: 1px solid var(--border-bright);
+  color: var(--accent-cyan); cursor: pointer; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; transition: all 0.2s;
+  font-family: var(--font-display);
+}
+.map-btn:hover { background: var(--accent-cyan-dim); border-color: var(--accent-cyan); }
+
+#filter-bar {
+  position: absolute; top: 12px; left: 12px; z-index: 100;
+  display: flex; gap: 6px;
+}
+.filter-btn {
+  padding: 5px 12px; border-radius: 20px; cursor: pointer;
+  font-size: 11px; font-family: var(--font-mono); font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  border: 1px solid transparent; transition: all 0.2s; user-select: none;
+}
+.filter-btn[data-active="true"] { opacity: 1; }
+.filter-btn[data-active="false"] { opacity: 0.4; filter: grayscale(0.7); }
+.fb-all { background: rgba(0,180,255,0.15); border-color: rgba(0,180,255,0.4); color: var(--accent-cyan); }
+.fb-green { background: rgba(0,230,118,0.1); border-color: rgba(0,230,118,0.35); color: var(--sev-green); }
+.fb-yellow { background: rgba(255,234,0,0.1); border-color: rgba(255,234,0,0.35); color: var(--sev-yellow); }
+.fb-red { background: rgba(255,23,68,0.1); border-color: rgba(255,23,68,0.35); color: var(--sev-red); }
+
+/* ── SIDEBAR ─────────────────────────────────────────────── */
+#feed-header {
+  flex-shrink: 0; padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.feed-title { font-size: 11px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-secondary); }
+.feed-count {
+  font-family: var(--font-mono); font-size: 11px; padding: 2px 8px;
+  background: var(--accent-cyan-dim); border: 1px solid var(--border-bright);
+  border-radius: 10px; color: var(--accent-cyan);
+}
+#feed-list {
+  flex: 1; overflow-y: auto; padding: 8px;
+  scrollbar-width: thin; scrollbar-color: var(--border-bright) transparent;
+}
+#feed-list::-webkit-scrollbar { width: 4px; }
+#feed-list::-webkit-scrollbar-track { background: transparent; }
+#feed-list::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+/* ── ALERT CARDS ─────────────────────────────────────────── */
+.alert-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px; margin-bottom: 6px; padding: 10px 12px;
+  cursor: pointer; transition: all 0.2s;
+  animation: slide-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  position: relative; overflow: hidden;
+}
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.alert-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  border-radius: 3px 0 0 3px;
+}
+.alert-card.sev-low::before { background: var(--sev-green); box-shadow: 0 0 8px var(--sev-green); }
+.alert-card.sev-mid::before { background: var(--sev-yellow); box-shadow: 0 0 8px var(--sev-yellow); }
+.alert-card.sev-high::before { background: var(--sev-red); box-shadow: 0 0 8px var(--sev-red); }
+.alert-card:hover { border-color: var(--border-bright); background: rgba(0,180,255,0.06); transform: translateX(-2px); }
+.alert-card.selected { border-color: var(--accent-cyan); background: rgba(0,180,255,0.1); }
+
+.card-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.card-label {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--text-primary); font-family: var(--font-mono);
+}
+.sev-badge {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  padding: 2px 7px; border-radius: 10px; letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+.badge-low { background: rgba(0,230,118,0.15); color: var(--sev-green); border: 1px solid rgba(0,230,118,0.3); }
+.badge-mid { background: rgba(255,234,0,0.12); color: var(--sev-yellow); border: 1px solid rgba(255,234,0,0.3); }
+.badge-high { background: rgba(255,23,68,0.15); color: var(--sev-red); border: 1px solid rgba(255,23,68,0.35); }
+.card-meta { font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); margin-top: 4px; display: flex; gap: 8px; }
+.card-coords { font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); }
+
+/* ── DETAIL PANEL ────────────────────────────────────────── */
+#detail-panel {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  max-height: 0;
+}
+#detail-panel.open { max-height: 340px; }
+
+#detail-inner { padding: 14px 16px; }
+.detail-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+.detail-title {
+  font-size: 13px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.15em; color: var(--text-primary); font-family: var(--font-mono);
+}
+.detail-close {
+  background: none; border: 1px solid var(--border-bright); color: var(--text-secondary);
+  width: 22px; height: 22px; border-radius: 4px; cursor: pointer;
+  font-size: 12px; display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+.detail-close:hover { border-color: var(--accent-red); color: var(--accent-red); }
+.detail-meta-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.detail-chip {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
+  padding: 3px 8px; border-radius: 4px;
+  background: rgba(0,180,255,0.08); border: 1px solid var(--border-bright);
+  color: var(--text-secondary);
+}
+.detail-chip strong { color: var(--text-primary); }
+
+.sev-bar-wrap { margin-bottom: 12px; }
+.sev-bar-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-bottom: 4px; letter-spacing: 0.08em; }
+.sev-bar-track { height: 4px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
+.sev-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+
+#waveform-wrap { position: relative; height: 90px; }
+.chart-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); letter-spacing: 0.08em; margin-bottom: 4px; }
+
+/* ── MAP MARKERS (Mapbox fallback / custom) ──────────────── */
+.mapboxgl-popup-content {
+  background: var(--bg-card) !important; border: 1px solid var(--border-bright) !important;
+  border-radius: 8px !important; padding: 10px 14px !important;
+  font-family: var(--font-display) !important; color: var(--text-primary) !important;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.6) !important;
+}
+.mapboxgl-popup-tip { border-top-color: var(--bg-card) !important; }
+.custom-marker {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid rgba(0,0,0,0.5);
+  cursor: pointer; transition: transform 0.2s;
+  box-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+  animation: marker-pulse 3s ease-in-out infinite;
+}
+@keyframes marker-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+}
+
+/* ── EMPTY STATE ─────────────────────────────────────────── */
+.empty-state {
+  padding: 30px 16px; text-align: center;
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+  letter-spacing: 0.08em; line-height: 1.8;
+}
+
+/* ── LOADING SHIMMER ─────────────────────────────────────── */
+@keyframes shimmer {
+  0% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+  100% { opacity: 0.3; }
+}
+.shimmer { animation: shimmer 1.6s ease-in-out infinite; }
+
+/* ── HEATMAP CANVAS ──────────────────────────────────────── */
+#heatmap-canvas {
+  position: absolute; inset: 0; pointer-events: none; z-index: 3;
+  opacity: 0.6; display: none;
+}
+#heatmap-toggle {
+  position: absolute; top: 12px; right: 12px; z-index: 100;
+  padding: 5px 12px; border-radius: 4px; cursor: pointer;
+  font-size: 11px; font-family: var(--font-mono); font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  background: rgba(255,184,0,0.1); border: 1px solid rgba(255,184,0,0.3);
+  color: var(--accent-amber); transition: all 0.2s;
+}
+#heatmap-toggle:hover { background: rgba(255,184,0,0.2); }
+#heatmap-toggle.active { background: rgba(255,184,0,0.25); border-color: var(--accent-amber); }
+
+/* ── DEMO MARKERS (SVG-based) ────────────────────────────── */
+#demo-map {
+  width: 100%; height: 100%; position: relative; overflow: hidden;
+}
+.demo-marker {
+  position: absolute; transform: translate(-50%,-50%);
+  width: 16px; height: 16px; border-radius: 50%;
+  cursor: pointer; transition: transform 0.2s;
+  display: flex; align-items: center; justify-content: center;
+}
+.demo-marker:hover { transform: translate(-50%,-50%) scale(1.4); }
+.demo-marker-inner {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.3);
+}
+.demo-marker.sev-low .demo-marker-inner { background: var(--sev-green); box-shadow: 0 0 10px var(--sev-green); }
+.demo-marker.sev-mid .demo-marker-inner { background: var(--sev-yellow); box-shadow: 0 0 10px var(--sev-yellow); }
+.demo-marker.sev-high .demo-marker-inner { background: var(--sev-red); box-shadow: 0 0 10px var(--sev-red); }
+.demo-ring {
+  position: absolute; inset: -4px; border-radius: 50%;
+  border: 1px solid currentColor; opacity: 0.4;
+  animation: ring-expand 2.5s ease-out infinite;
+}
+.sev-low { color: var(--sev-green); }
+.sev-mid { color: var(--sev-yellow); }
+.sev-high { color: var(--sev-red); }
+@keyframes ring-expand {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* ── CITY LABEL ──────────────────────────────────────────── */
+.city-label {
+  position: absolute; font-family: var(--font-mono); font-size: 9px;
+  color: rgba(0,180,255,0.4); letter-spacing: 0.12em; text-transform: uppercase;
+  pointer-events: none; white-space: nowrap;
+}
+.road-line {
+  position: absolute; background: rgba(0,180,255,0.06); border-radius: 1px;
+  pointer-events: none;
+}
+
+/* ── NOTIFICATION FLASH ──────────────────────────────────── */
+#new-alert-toast {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 200; padding: 6px 16px; border-radius: 20px;
+  background: rgba(255,23,68,0.15); border: 1px solid rgba(255,23,68,0.4);
+  color: var(--sev-red); font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap;
+}
+#new-alert-toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- TOPBAR -->
+  <header id="topbar">
+    <div class="logo-mark">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="16,2 28,9 28,23 16,30 4,23 4,9" fill="none" stroke="rgba(0,180,255,0.5)" stroke-width="1"/>
+        <polygon points="16,6 24,11 24,21 16,26 8,21 8,11" fill="rgba(0,180,255,0.08)" stroke="rgba(0,180,255,0.3)" stroke-width="0.8"/>
+        <circle cx="16" cy="16" r="3" fill="var(--accent-cyan)"/>
+        <line x1="16" y1="8" x2="16" y2="13" stroke="var(--accent-cyan)" stroke-width="1"/>
+        <line x1="16" y1="19" x2="16" y2="24" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.5"/>
+      </svg>
+    </div>
+    <div class="logo-text">KINETIC <span>TRANSPORT</span> TRACKER</div>
+    <div class="topbar-divider"></div>
+    <div class="status-dot"></div>
+    <div class="status-label">LIVE FEED</div>
+    <div class="topbar-stats">
+      <div class="tstat">
+        <div class="tstat-val" id="stat-total">0</div>
+        <div class="tstat-lbl">Issues</div>
+      </div>
+      <div class="tstat">
+        <div class="tstat-val" id="stat-critical" style="color:var(--sev-red)">0</div>
+        <div class="tstat-lbl">Critical</div>
+      </div>
+      <div class="tstat">
+        <div class="tstat-val" id="stat-avg" style="color:var(--accent-amber)">—</div>
+        <div class="tstat-lbl">Avg Sev</div>
+      </div>
+      <div class="time-display" id="clock">——:——:——</div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <div id="content">
+    <!-- MAP AREA -->
+    <div id="map-container">
+      <div id="map"></div>
+
+      <!-- Demo fallback (shown when Mapbox not configured) -->
+      <div id="demo-map-container" style="position:absolute;inset:0;display:none;z-index:5;">
+        <div class="map-grid"></div>
+        <div id="demo-map"></div>
+        <div class="city-label" style="left:15%;top:18%">BELGAUM SECTOR</div>
+        <div class="city-label" style="left:52%;top:60%">DHARWAD DIST.</div>
+        <div class="city-label" style="right:12%;top:30%">NH-48 CORRIDOR</div>
+        <!-- Road lines -->
+        <div class="road-line" style="left:20%;top:25%;width:60%;height:1px;transform:rotate(-5deg)"></div>
+        <div class="road-line" style="left:30%;top:10%;width:1px;height:80%"></div>
+        <div class="road-line" style="left:60%;top:15%;width:1px;height:70%"></div>
+        <div class="road-line" style="left:10%;top:50%;width:80%;height:1px;transform:rotate(8deg)"></div>
+        <!-- Markers injected by JS -->
+      </div>
+
+      <!-- Heatmap canvas -->
+      <canvas id="heatmap-canvas"></canvas>
+
+      <!-- Controls -->
+      <div id="filter-bar">
+        <button class="filter-btn fb-all"    data-filter="all"    data-active="true"  onclick="setFilter('all')">ALL</button>
+        <button class="filter-btn fb-green"  data-filter="low"    data-active="true"  onclick="setFilter('low')">LOW</button>
+        <button class="filter-btn fb-yellow" data-filter="mid"    data-active="true"  onclick="setFilter('mid')">MED</button>
+        <button class="filter-btn fb-red"    data-filter="high"   data-active="true"  onclick="setFilter('high')">HIGH</button>
+      </div>
+      <button id="heatmap-toggle" onclick="toggleHeatmap()">⬡ HEATMAP</button>
+      <div id="new-alert-toast">⚠ NEW ALERT INCOMING</div>
+
+      <div id="map-controls">
+        <button class="map-btn" title="Zoom In"  onclick="mapZoom(1)">+</button>
+        <button class="map-btn" title="Zoom Out" onclick="mapZoom(-1)">−</button>
+      </div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+      <div id="feed-header">
+        <div class="feed-title">⬡ ALERT FEED</div>
+        <div class="feed-count" id="feed-count">0 ACTIVE</div>
+      </div>
+      <div id="feed-list">
+        <div class="empty-state shimmer" id="empty-state">
+          CONNECTING TO FIREBASE...<br>AWAITING TELEMETRY DATA
+        </div>
+      </div>
+
+      <!-- DETAIL PANEL -->
+      <div id="detail-panel">
+        <div id="detail-inner">
+          <div class="detail-header">
+            <div class="detail-title" id="detail-label">—</div>
+            <button class="detail-close" onclick="closeDetail()">✕</button>
+          </div>
+          <div class="detail-meta-row" id="detail-meta"></div>
+          <div class="sev-bar-wrap">
+            <div class="sev-bar-label">SEVERITY INDEX</div>
+            <div class="sev-bar-track">
+              <div class="sev-bar-fill" id="sev-bar" style="width:0%"></div>
+            </div>
+          </div>
+          <div class="chart-label">ACCELEROMETER WAVEFORM</div>
+          <div id="waveform-wrap">
+            <canvas id="waveform-chart"></canvas>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  DEMO DATA (used when Firebase isn't configured)
+// ══════════════════════════════════════════════════════════════
+const DEMO_ISSUES = {
+  "issue_001": { lat: 15.8497, lng: 74.4977, label: "pothole",   severity: 9, timestamp: Date.now()/1000 - 120,  waveform: [0.1,0.3,0.8,2.4,3.1,2.8,1.2,0.4,0.1,0.2,0.5,1.8,2.2,1.5,0.3] },
+  "issue_002": { lat: 15.8550, lng: 74.5050, label: "bump",      severity: 4, timestamp: Date.now()/1000 - 360,  waveform: [0.2,0.4,0.9,1.1,0.8,0.5,0.3,0.4,0.7,0.9,0.6,0.3] },
+  "issue_003": { lat: 15.8430, lng: 74.5120, label: "pothole",   severity: 7, timestamp: Date.now()/1000 - 900,  waveform: [0.1,0.2,1.0,2.0,3.5,2.8,1.6,0.8,0.3,0.1,0.4,1.2,1.8,1.0,0.2] },
+  "issue_004": { lat: 15.8610, lng: 74.4900, label: "crack",     severity: 2, timestamp: Date.now()/1000 - 1800, waveform: [0.1,0.2,0.3,0.4,0.3,0.2,0.3,0.4,0.3,0.2,0.1] },
+  "issue_005": { lat: 15.8510, lng: 74.5200, label: "pothole",   severity: 8, timestamp: Date.now()/1000 - 2700, waveform: [0.2,0.5,1.6,2.1,0.3,0.1,2.8,3.2,1.4,0.5,0.2] },
+  "issue_006": { lat: 15.8460, lng: 74.4850, label: "subsidence",severity: 5, timestamp: Date.now()/1000 - 3600, waveform: [0.3,0.6,0.9,1.1,1.3,1.2,1.0,0.8,0.6,0.4,0.3] },
+  "issue_007": { lat: 15.8580, lng: 74.5080, label: "pothole",   severity: 10,timestamp: Date.now()/1000 - 180,  waveform: [0.1,0.4,1.2,3.5,4.0,3.8,2.2,1.0,0.4,0.1,0.3,1.5,2.8,3.1,1.2] },
+  "issue_008": { lat: 15.8490, lng: 74.5150, label: "debris",    severity: 3, timestamp: Date.now()/1000 - 7200, waveform: [0.2,0.3,0.5,0.4,0.3,0.5,0.4,0.3,0.2,0.3,0.4] },
+};
+
+// ══════════════════════════════════════════════════════════════
+//  APP STATE
+// ══════════════════════════════════════════════════════════════
+let issues = {};
+let selectedId = null;
+let activeFilter = 'all';
+let heatmapOn = false;
+let mapInstance = null;
+let markers = {};
+let waveformChart = null;
+let demoMode = false;
+
+// ══════════════════════════════════════════════════════════════
+//  UTILITY
+// ══════════════════════════════════════════════════════════════
+function getSevClass(sev) {
+  if (sev <= 3) return 'sev-low';
+  if (sev <= 6) return 'sev-mid';
+  return 'sev-high';
+}
+function getSevColor(sev) {
+  if (sev <= 3) return 'var(--sev-green)';
+  if (sev <= 6) return 'var(--sev-yellow)';
+  return 'var(--sev-red)';
+}
+function getBadgeClass(sev) {
+  if (sev <= 3) return 'badge-low';
+  if (sev <= 6) return 'badge-mid';
+  return 'badge-high';
+}
+function relativeTime(ts) {
+  const diff = Math.floor(Date.now()/1000 - ts);
+  if (diff < 60)  return diff + 's ago';
+  if (diff < 3600)return Math.floor(diff/60) + 'm ago';
+  return Math.floor(diff/3600) + 'h ago';
+}
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const s = String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('clock').textContent = h + ':' + m + ':' + s;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ══════════════════════════════════════════════════════════════
+//  FILTER
+// ══════════════════════════════════════════════════════════════
+function setFilter(f) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.dataset.active = (btn.dataset.filter === f || f === 'all') ? 'true' : 'false';
+  });
+  renderFeed();
+  renderMarkers();
+}
+
+function isVisible(issue) {
+  if (activeFilter === 'all') return true;
+  const cls = getSevClass(issue.severity);
+  return cls === 'sev-' + activeFilter;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  TOPBAR STATS
+// ══════════════════════════════════════════════════════════════
+function updateStats() {
+  const all = Object.values(issues);
+  const critical = all.filter(i => i.severity >= 7).length;
+  const avg = all.length ? (all.reduce((a,i) => a + i.severity, 0) / all.length).toFixed(1) : '—';
+  document.getElementById('stat-total').textContent = all.length;
+  document.getElementById('stat-critical').textContent = critical;
+  document.getElementById('stat-avg').textContent = avg;
+  document.getElementById('feed-count').textContent = all.length + ' ACTIVE';
+}
+
+// ══════════════════════════════════════════════════════════════
+//  FEED RENDER
+// ══════════════════════════════════════════════════════════════
+function renderFeed() {
+  const list = document.getElementById('feed-list');
+  const empty = document.getElementById('empty-state');
+  const sorted = Object.entries(issues)
+    .filter(([,i]) => isVisible(i))
+    .sort((a,b) => b[1].timestamp - a[1].timestamp);
+
+  if (sorted.length === 0) {
+    list.innerHTML = '';
+    const msg = Object.keys(issues).length === 0
+      ? 'CONNECTING TO FIREBASE...\nAWAITING TELEMETRY DATA'
+      : 'NO ISSUES MATCHING FILTER';
+    list.innerHTML = `<div class="empty-state shimmer">${msg.replace('\n','<br>')}</div>`;
+    return;
+  }
+
+  const existing = new Set();
+  list.querySelectorAll('.alert-card').forEach(el => existing.add(el.dataset.id));
+  const incoming = new Set(sorted.map(([id]) => id));
+
+  // Remove deleted
+  list.querySelectorAll('.alert-card').forEach(el => {
+    if (!incoming.has(el.dataset.id)) el.remove();
+  });
+
+  // Insert/update (prepend new ones)
+  sorted.forEach(([id, issue], idx) => {
+    let card = list.querySelector(`[data-id="${id}"]`);
+    const sevCls = getSevClass(issue.severity);
+    const badgeCls = getBadgeClass(issue.severity);
+    const html = `
+      <div class="card-row">
+        <div class="card-label">${issue.label.toUpperCase()}</div>
+        <div class="sev-badge ${badgeCls}">SEV ${issue.severity}</div>
+      </div>
+      <div class="card-meta">
+        <span>⬡ ${relativeTime(issue.timestamp)}</span>
+        <span class="card-coords">${issue.lat.toFixed(4)}, ${issue.lng.toFixed(4)}</span>
+      </div>
+    `;
+    if (!card) {
+      card = document.createElement('div');
+      card.className = `alert-card ${sevCls}`;
+      card.dataset.id = id;
+      card.style.animationDelay = (idx * 0.05) + 's';
+      card.onclick = () => selectIssue(id);
+      list.prepend(card);
+    }
+    card.innerHTML = html;
+    card.classList.toggle('selected', id === selectedId);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DETAIL PANEL
+// ══════════════════════════════════════════════════════════════
+function selectIssue(id) {
+  selectedId = id;
+  const issue = issues[id];
+  if (!issue) return;
+
+  document.querySelectorAll('.alert-card').forEach(el => {
+    el.classList.toggle('selected', el.dataset.id === id);
+  });
+
+  const panel = document.getElementById('detail-panel');
+  panel.classList.add('open');
+
+  document.getElementById('detail-label').textContent = issue.label.toUpperCase() + ' DETECTED';
+  document.getElementById('detail-meta').innerHTML = `
+    <div class="detail-chip"><strong>SEV:</strong> ${issue.severity}/10</div>
+    <div class="detail-chip"><strong>LAT:</strong> ${issue.lat.toFixed(5)}</div>
+    <div class="detail-chip"><strong>LNG:</strong> ${issue.lng.toFixed(5)}</div>
+    <div class="detail-chip"><strong>TIME:</strong> ${relativeTime(issue.timestamp)}</div>
+  `;
+
+  const bar = document.getElementById('sev-bar');
+  bar.style.width = (issue.severity * 10) + '%';
+  bar.style.background = getSevColor(issue.severity);
+  if (issue.severity >= 7) bar.style.boxShadow = '0 0 8px ' + getSevColor(issue.severity);
+
+  renderWaveform(issue.waveform, issue.severity);
+  if (demoMode) panDemoMap(id);
+  else if (mapInstance) mapInstance.flyTo({ center: [issue.lng, issue.lat], zoom: 16 });
+}
+
+function closeDetail() {
+  selectedId = null;
+  document.getElementById('detail-panel').classList.remove('open');
+  document.querySelectorAll('.alert-card').forEach(el => el.classList.remove('selected'));
+}
+
+// ══════════════════════════════════════════════════════════════
+//  WAVEFORM CHART
+// ══════════════════════════════════════════════════════════════
+function renderWaveform(wf, severity) {
+  const ctx = document.getElementById('waveform-chart').getContext('2d');
+  if (waveformChart) waveformChart.destroy();
+  const color = getSevColor(severity);
+
+  waveformChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: wf.map((_,i) => i),
+      datasets: [{
+        data: wf,
+        borderColor: color,
+        backgroundColor: color.replace('var(', '').replace(')', '') === '--sev-red'
+          ? 'rgba(255,23,68,0.08)' : severity > 6
+          ? 'rgba(255,23,68,0.08)' : severity > 3
+          ? 'rgba(255,234,0,0.06)' : 'rgba(0,230,118,0.06)',
+        borderWidth: 2,
+        tension: 0.5,
+        fill: true,
+        pointRadius: 3,
+        pointBackgroundColor: color,
+        pointBorderColor: 'transparent',
+        pointHoverRadius: 5,
+      }]
+    },
+    options: {
+      animation: { duration: 600, easing: 'easeOutCubic' },
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: { label: ctx => 'g: ' + ctx.raw.toFixed(2) },
+        backgroundColor: 'rgba(6,13,20,0.95)',
+        borderColor: 'rgba(0,180,255,0.3)',
+        borderWidth: 1,
+        titleFont: { family: 'Space Mono' },
+        bodyFont: { family: 'Space Mono', size: 11 },
+      }},
+      scales: {
+        x: { display: false },
+        y: {
+          grid: { color: 'rgba(0,180,255,0.06)' },
+          ticks: { font: { family: 'Space Mono', size: 9 }, color: 'rgba(120,170,210,0.45)', maxTicksLimit: 4 },
+          border: { color: 'transparent' }
+        }
+      }
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  DEMO MAP (no Mapbox key needed)
+// ══════════════════════════════════════════════════════════════
+function lnglatToPercent(lat, lng) {
+  const centerLat = 15.852, centerLng = 74.505;
+  const rangeLat = 0.035, rangeLng = 0.05;
+  const x = 10 + ((lng - centerLng + rangeLng/2) / rangeLng) * 80;
+  const y = 10 + ((centerLat + rangeLat/2 - lat) / rangeLat) * 80;
+  return { x: Math.max(5, Math.min(95, x)), y: Math.max(5, Math.min(95, y)) };
+}
+
+function renderMarkers() {
+  if (demoMode) renderDemoMarkers();
+  else renderMapboxMarkers();
+}
+
+function renderDemoMarkers() {
+  const container = document.getElementById('demo-map');
+  // Remove old markers
+  container.querySelectorAll('.demo-marker').forEach(el => el.remove());
+
+  Object.entries(issues).forEach(([id, issue]) => {
+    if (!isVisible(issue)) return;
+    const { x, y } = lnglatToPercent(issue.lat, issue.lng);
+    const sevCls = getSevClass(issue.severity);
+    const marker = document.createElement('div');
+    marker.className = `demo-marker ${sevCls}`;
+    marker.style.left = x + '%';
+    marker.style.top  = y + '%';
+    marker.dataset.id = id;
+    marker.style.animationDelay = (Math.random() * 2) + 's';
+    marker.innerHTML = `
+      <div class="demo-ring"></div>
+      <div class="demo-marker-inner"></div>
+    `;
+    marker.onclick = () => selectIssue(id);
+    container.appendChild(marker);
+  });
+
+  if (heatmapOn) drawHeatmap();
+}
+
+function panDemoMap(id) {
+  // Visual feedback: flash the selected marker
+  const marker = document.querySelector(`.demo-marker[data-id="${id}"]`);
+  if (marker) {
+    marker.style.transform = 'translate(-50%,-50%) scale(2)';
+    setTimeout(() => marker.style.transform = '', 400);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MAPBOX INTEGRATION
+// ══════════════════════════════════════════════════════════════
+
+function initMapbox() {
+  try {
+    console.log("Mapbox loading...");
+    console.log("Using token:", MAPBOX_TOKEN);
+    const script = document.createElement('script');
+    script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js';
+
+    script.onload = () => {
+      console.log("Mapbox script loaded");
+
+      if (!window.mapboxgl) {
+        fallbackToDemo();
+        return;
+      }
+
+      // ✅ THIS IS CORRECT PLACE
+      window.mapboxgl.accessToken = MAPBOX_TOKEN;
+
+      mapInstance = new window.mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: [74.5050, 15.8497],
+        zoom: 13,
+      });
+    
+
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
+      document.head.appendChild(link);
+
+      if (!window.mapboxgl) {
+        console.error("Mapbox failed → fallback");
+        fallbackToDemo();
+        return;
+      }
+
+      window.mapboxgl.accessToken = MAPBOX_TOKEN;
+
+      mapInstance = new window.mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: [74.5050, 15.8497],
+        zoom: 13,
+      });
+
+      mapInstance.on('load', () => {
+        console.log("Mapbox initialized");
+        demoMode = false;
+        document.getElementById('demo-map-container').style.display = 'none';
+        document.getElementById('map').style.display = 'block';
+        renderMapboxMarkers();
+      });
+    };
+
+    script.onerror = () => {
+      console.error("Mapbox failed to load → fallback");
+      fallbackToDemo();
+    };
+
+    document.head.appendChild(script);
+
+  } catch (e) {
+    console.error("Mapbox crash → fallback", e);
+    fallbackToDemo();
+  }
+}
+function fallbackToDemo() {
+  console.log("Switching to demo mode");
+
+  demoMode = true;
+  document.getElementById('map').style.display = 'none';
+  document.getElementById('demo-map-container').style.display = 'block';
+
+  renderMarkers();
+}
+function renderMapboxMarkers() {
+  if (!mapInstance) return;
+  Object.entries(markers).forEach(([id, m]) => m.remove());
+  markers = {};
+
+  Object.entries(issues).forEach(([id, issue]) => {
+    if (!isVisible(issue)) return;
+    const el = document.createElement('div');
+    el.className = `custom-marker ${getSevClass(issue.severity)}`;
+    const c = getSevColor(issue.severity);
+    el.style.cssText = `background:${c};width:14px;height:14px;border-radius:50%;cursor:pointer;box-shadow:0 0 12px ${c};border:2px solid rgba(0,0,0,0.3);`;
+    el.onclick = () => selectIssue(id);
+
+    markers[id] = new window.mapboxgl.Marker({ element: el })
+      .setLngLat([issue.lng, issue.lat])
+      .addTo(mapInstance);
+  });
+}
+
+function mapZoom(dir) {
+  if (mapInstance) mapInstance.setZoom(mapInstance.getZoom() + dir);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  HEATMAP (canvas-based)
+// ══════════════════════════════════════════════════════════════
+function toggleHeatmap() {
+  heatmapOn = !heatmapOn;
+  const toggle = document.getElementById('heatmap-toggle');
+  const canvas = document.getElementById('heatmap-canvas');
+  toggle.classList.toggle('active', heatmapOn);
+  canvas.style.display = heatmapOn ? 'block' : 'none';
+  if (heatmapOn) drawHeatmap();
+}
+
+function drawHeatmap() {
+  const canvas = document.getElementById('heatmap-canvas');
+  const container = document.getElementById('map-container');
+  canvas.width  = container.offsetWidth;
+  canvas.height = container.offsetHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  Object.values(issues).forEach(issue => {
+    const { x, y } = lnglatToPercent(issue.lat, issue.lng);
+    const px = (x / 100) * canvas.width;
+    const py = (y / 100) * canvas.height;
+    const r  = 80 + issue.severity * 8;
+    const g  = ctx.createRadialGradient(px, py, 0, px, py, r);
+    const intensity = issue.severity / 10;
+    if (issue.severity >= 7) {
+      g.addColorStop(0,   `rgba(255,23,68,${0.5 * intensity})`);
+      g.addColorStop(0.5, `rgba(255,100,0,${0.2 * intensity})`);
+    } else if (issue.severity >= 4) {
+      g.addColorStop(0,   `rgba(255,234,0,${0.4 * intensity})`);
+      g.addColorStop(0.5, `rgba(255,150,0,${0.15 * intensity})`);
+    } else {
+      g.addColorStop(0,   `rgba(0,230,118,${0.35 * intensity})`);
+      g.addColorStop(0.5, `rgba(0,180,100,${0.12 * intensity})`);
+    }
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  NEW ALERT TOAST
+// ══════════════════════════════════════════════════════════════
+function showToast() {
+  const toast = document.getElementById('new-alert-toast');
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  FIREBASE INTEGRATION
+// ══════════════════════════════════════════════════════════════
+function startFirebase() {
+  const { db, ref, onValue } = window.__firebaseReady || {};
+  if (!db) {
+    console.error("Firebase not connected");
+    return;
+  }
+
+  onValue(ref(db, '/alerts'), (snapshot) => {
+    const data = snapshot.val() || {};
+    const isFirst = Object.keys(issues).length === 0;
+    const wasSize = Object.keys(issues).length;
+    const transformed = {};
+    Object.entries(data).forEach(([id, alert]) => {
+      if (!alert.location) return;
+
+      let sev = 3;
+      if (alert.severity === "high") sev = 9;
+      else if (alert.severity === "medium") sev = 6;
+
+      transformed[id] = {
+        lat: alert.location.lat,
+        lng: alert.location.lng,
+        label: alert.classification || "unknown",
+        severity: sev,
+        timestamp: Math.floor(new Date(alert.timestamp_utc).getTime() / 1000)
+      };
+    });
+
+    issues = transformed;
+    const nowSize = Object.keys(issues).length;
+    updateStats();
+    renderFeed();
+    renderMarkers();
+    if (!isFirst && nowSize > wasSize) showToast();
+    if (heatmapOn) drawHeatmap();
+  });
+}
+
+function loadDemoData() {
+  // Simulate streaming arrival with staggered timeouts
+  issues = {};
+  const entries = Object.entries(DEMO_ISSUES);
+  entries.forEach(([id, issue], i) => {
+    setTimeout(() => {
+      issues[id] = issue;
+      if (i > 0) showToast();
+      updateStats();
+      renderFeed();
+      renderMarkers();
+      if (heatmapOn) drawHeatmap();
+    }, 300 + i * 400);
+  });
+
+  // Simulate new issue arriving
+  setTimeout(() => {
+    const newId = 'issue_new_' + Date.now();
+    issues[newId] = {
+      lat: 15.8520, lng: 74.5010,
+      label: 'pothole', severity: 8,
+      timestamp: Date.now()/1000,
+      waveform: [0.1,0.3,1.2,3.8,4.2,3.5,1.8,0.7,0.2,0.4,1.5,2.9,2.1,0.8,0.1]
+    };
+    showToast();
+    updateStats();
+    renderFeed();
+    renderMarkers();
+    if (heatmapOn) drawHeatmap();
+  }, 12000);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  initMapbox();
+
+  // fallback safety (if map not loaded in 2s)
+  setTimeout(() => {
+    if (!mapInstance) {
+      fallbackToDemo();
+    }
+  }, 2000);
+
+  // Wait for Firebase module to load
+  const tryStart = () => {
+    if (window.__firebaseReady) {
+      startFirebase();
+    } else {
+      setTimeout(tryStart, 100);
+    }
+  };
+  // If firebase config invalid, fall to demo after 2s
+  setTimeout(() => {
+    if (Object.keys(issues).length === 0) loadDemoData();
+  }, 2000);
+  tryStart();
+
+  // Live timestamp refresh
+  setInterval(() => renderFeed(), 30000);
+  // Heatmap resize
+  window.addEventListener('resize', () => { if (heatmapOn) drawHeatmap(); });
+});
+
+</script>
+</body>
+</html>
