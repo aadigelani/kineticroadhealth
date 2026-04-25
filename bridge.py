@@ -506,3 +506,19 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+from flask import Flask
+import threading
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Backend running"
+
+def run_worker():
+    main()  # your existing function
+
+if __name__ == "__main__":
+    threading.Thread(target=run_worker).start()
+    app.run(host="0.0.0.0", port=10000)
