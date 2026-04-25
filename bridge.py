@@ -510,16 +510,26 @@ if __name__ == "__main__":
 from flask import Flask
 import threading
 import os
+
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Backend running"
+    return "Backend running ✅"
 
-def run_worker():
-    main()  # your existing function
+def start_worker():
+    try:
+        main()  # your existing function
+    except Exception as e:
+        print("Worker crashed:", e)
 
 if __name__ == "__main__":
-    threading.Thread(target=run_worker).start()
+    # Start worker in background
+    threading.Thread(target=start_worker, daemon=True).start()
+
+    # MUST use Render port
     port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+
+    print(f"Starting Flask on port {port}...")
+
+    app.run(host="0.0.0.0", port=port, debug=False)
