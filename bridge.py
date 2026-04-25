@@ -50,20 +50,28 @@ GEMINI_MODEL = "models/gemini-2.0-flash"
 # Initialisation
 # ─────────────────────────────────────────────
 
-def init_firebase() -> None:
-    """Initialise Firebase Admin SDK from a service-account JSON file."""
-    service_account_path = os.environ.get(
-        "FIREBASE_SERVICE_ACCOUNT", "serviceAccount.json"
-    )
+import os
+import json
+from firebase_admin import credentials
+
+def init_firebase():
     database_url = os.environ.get("FIREBASE_DATABASE_URL")
-    if not database_url:
-        raise EnvironmentError(
-            "Set FIREBASE_DATABASE_URL environment variable "
-            "(e.g. https://<project>.firebaseio.com)"
-        )
-    cred = credentials.Certificate(service_account_path)
-    firebase_admin.initialize_app(cred, {"databaseURL": database_url})
-    log.info("Firebase initialised — database: %s", database_url)
+
+    service_account_env = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+
+    if service_account_env and service_account_env.strip().startswith("{"):
+        # ✅ JSON string from Render
+        service_account_info = json.loads(service_account_env)
+        cred = credentials.Certificate(service_account_info)
+    else:
+        # ✅ Local file fallback
+        cred = credentials.Certificate("serviceAccount.json")
+
+    firebase_admin.initialize_app(cred, {
+        "databaseURL": database_url
+    })
+
+    print("Firebase initialized")
 
 
 def init_gemini() -> genai.GenerativeModel:
