@@ -36,8 +36,8 @@ ALERT_COOLDOWN_S    = 30    # minimum seconds between alerts for the same GPS ce
 GRID_RESOLUTION_DEG = 0.001 # ~100m grid cell for deduplication
 
 # --- Firebase paths ---
-SPIKES_PATH = "/spikes"
-ALERTS_PATH = "/alerts"
+SPIKES_PATH = "spikes"
+ALERTS_PATH = "alerts"
 
 # --- Gemini model ---
 GEMINI_MODEL = "models/gemini-2.0-flash"
