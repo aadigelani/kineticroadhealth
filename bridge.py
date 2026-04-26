@@ -386,9 +386,13 @@ class SpikeListener:
         self._lock  = threading.Lock()
 
     def start(self) -> None:
-        log.info("Listening on %s — spike threshold: %.1f g", SPIKES_PATH, SPIKE_THRESHOLD_G)
-        db.reference(SPIKES_PATH).listen(self._on_spike_event)
-        # Keep the main thread alive; the listener runs on its own thread.
+        log.info("Starting Firebase listener thread...")
+
+        def run_listener():
+            db.reference(SPIKES_PATH).listen(self._on_spike_event)
+
+        threading.Thread(target=run_listener, daemon=True).start()
+
         while True:
             time.sleep(60)
 
