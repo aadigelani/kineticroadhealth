@@ -1,12 +1,9 @@
-"""
-Kinetic Transport Tracker — Python Bridge
+"""""
 ==========================================
-Listens to Firebase Realtime DB for vibration spikes (Z-axis > 1.5g),
-builds a structured payload, calls Gemini 2.0 Flash for classification,
+Listens to Firebase Realtime DB for vibration spikes (Z-axis > 1.5g),we get the payload and then
+calls Gemini 2.0 Flash for classification,
 and writes the result back to Firebase as a road-health alert.
-
-SDG 11 / UN Decade of Sustainable Transport (2026-2035)
-Google Solution Challenge 2026
+For Google Solution Challenge 2026
 """
 
 import os
@@ -58,7 +55,8 @@ from firebase_admin import credentials
 def init_firebase():
     database_url = os.environ.get("FIREBASE_DATABASE_URL")
     service_account_env = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
-
+    if not database_url:
+        raise EnvironmentError("FIREBASE_DATABASE_URL not set")
     if service_account_env:
         # ✅ JSON from Railway env
         service_account_info = json.loads(service_account_env)
@@ -329,26 +327,33 @@ def write_alert(
     stats: dict,
 ) -> None:
     """
-    Write the processed alert to /alerts/{spike_id}.
-    Alert ID is always identical to spike_id — no random or timestamp suffixes.
-    updated_at ensures Firebase always fires a change event on the frontend.
+    Write alert in frontend-compatible format.
     """
+
+    # 🔥 Convert severity (string → number)
+    sev_map = {
+        "low": 2,
+        "medium": 5,
+        "high": 8,
+        "critical": 10
+    }
+
+    severity_str = classification.get("severity", "medium")
+    severity_num = sev_map.get(severity_str, 5)
+
+    # 🔥 FINAL FORMAT (matches your frontend)
     alert = {
-        "spike_id":           spike_id,
-        "timestamp_utc":      datetime.now(timezone.utc).isoformat(),
-        "location": {
-            "lat":     lat,
-            "lng":     lng,
-            "geohash": _simple_geohash(lat, lng),
-        },
-        "classification":     classification["classification"],
-        "confidence":         classification["confidence"],
-        "severity":           classification["severity"],
-        "reasoning":          classification["reasoning"],
-        "recommended_action": classification["recommended_action"],
-        "sensor_stats":       stats,
-        "processed_by":       "ktt-bridge-v1",
-        "updated_at":         time.time(),
+        "id": spike_id,
+        "lat": lat,
+        "lng": lng,
+        "label": classification.get("classification", "unknown"),
+        "severity": severity_num,
+        "confidence": classification.get("confidence", 0),
+        "timestamp": time.time(),
+
+        # optional but useful
+        "waveform": stats.get("az_peak_g", []) if isinstance(stats, dict) else [],
+        "raw": classification,  # keep original data for debugging
     }
 
     db.reference(f"{ALERTS_PATH}/{spike_id}").set(alert)
