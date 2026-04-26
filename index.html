@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Kinetic Transport Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<title>MINT — Mapping Irregularities In Navigation Terrain</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
@@ -33,21 +33,14 @@ let db = null;
 
 try {
   const app = initializeApp(firebaseConfig);
-
-  // ✅ init services
   db = getDatabase(app);
   const auth = getAuth(app);
-
-  // ✅ auth FIRST
   signInAnonymously(auth)
     .then(() => {
       console.log("Firebase anonymous auth success");
-
-      // ✅ expose AFTER auth
       window.__firebaseReady = { db, ref, onValue };
     })
     .catch(err => console.error("Auth failed", err));
-
 } catch(e) {
   console.warn("Firebase not configured — using demo data");
 }
@@ -78,6 +71,8 @@ try {
   --font-display: 'Syne', sans-serif;
   --font-mono: 'Space Mono', monospace;
   --scan-speed: 3s;
+  --sheet-height: 60vh;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-void); color: var(--text-primary); font-family: var(--font-display); }
 
@@ -123,10 +118,12 @@ body::after {
 }
 .logo-mark svg { width: 100%; height: 100%; }
 .logo-text {
-  font-size: 14px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  font-size: 14px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--text-primary);
+  display: flex; align-items: baseline; gap: 6px;
 }
-.logo-text span { color: var(--accent-cyan); }
+.logo-text .brand-main { color: var(--accent-cyan); font-size: 16px; }
+.logo-text .brand-sub  { color: var(--text-secondary); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; display: none; }
 .topbar-divider { width: 1px; height: 24px; background: var(--border-bright); margin: 0 4px; }
 .status-dot {
   width: 8px; height: 8px; border-radius: 50%;
@@ -147,11 +144,6 @@ body::after {
 
 /* ── MAP ─────────────────────────────────────────────────── */
 #map { width: 100%; height: 100%; }
-.map-overlay-text {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 10px; pointer-events: none;
-  z-index: 2;
-}
 .map-placeholder {
   position: absolute; inset: 0; z-index: 1;
   background: #060d14;
@@ -189,6 +181,7 @@ body::after {
   font-family: var(--font-display);
 }
 .map-btn:hover { background: var(--accent-cyan-dim); border-color: var(--accent-cyan); }
+.map-btn:active { transform: scale(0.93); }
 
 #filter-bar {
   position: absolute; top: 12px; left: 12px; z-index: 100;
@@ -232,7 +225,7 @@ body::after {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 8px; margin-bottom: 6px; padding: 10px 12px;
-  cursor: pointer; transition: all 0.2s;
+  cursor: pointer; transition: border-color 0.2s, background 0.2s, transform 0.18s, box-shadow 0.2s;
   animation: slide-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
   position: relative; overflow: hidden;
 }
@@ -243,12 +236,42 @@ body::after {
 .alert-card::before {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
   border-radius: 3px 0 0 3px;
+  transition: width 0.2s;
 }
 .alert-card.sev-low::before { background: var(--sev-green); box-shadow: 0 0 8px var(--sev-green); }
 .alert-card.sev-mid::before { background: var(--sev-yellow); box-shadow: 0 0 8px var(--sev-yellow); }
 .alert-card.sev-high::before { background: var(--sev-red); box-shadow: 0 0 8px var(--sev-red); }
-.alert-card:hover { border-color: var(--border-bright); background: rgba(0,180,255,0.06); transform: translateX(-2px); }
-.alert-card.selected { border-color: var(--accent-cyan); background: rgba(0,180,255,0.1); }
+.alert-card:hover { border-color: var(--border-bright); background: rgba(0,180,255,0.06); transform: translateX(-2px); box-shadow: 2px 0 12px rgba(0,180,255,0.06); }
+.alert-card:active { transform: translateX(-1px) scale(0.99); }
+.alert-card.selected {
+  border-color: var(--accent-cyan);
+  background: rgba(0,180,255,0.10);
+  box-shadow: 0 0 0 1px rgba(0,180,255,0.15), inset 0 0 20px rgba(0,180,255,0.04);
+}
+.alert-card.selected::before { width: 4px; }
+
+/* ── MARKER PULSE (click feedback) ──────────────────────── */
+@keyframes marker-click-pulse {
+  0%   { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
+  40%  { transform: translate(-50%,-50%) scale(2.5); opacity: 0.8; }
+  100% { transform: translate(-50%,-50%) scale(4);   opacity: 0; }
+}
+.demo-marker-pulse {
+  position: absolute;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  pointer-events: none;
+  animation: marker-click-pulse 0.7s ease-out forwards;
+}
+@keyframes mapbox-marker-pulse {
+  0%   { transform: scale(1); box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  70%  { transform: scale(1.6); box-shadow: 0 0 0 12px transparent; opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.marker-glow {
+  animation: mapbox-marker-pulse 0.6s ease-out !important;
+}
 
 .card-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .card-label {
@@ -258,12 +281,15 @@ body::after {
 .sev-badge {
   font-family: var(--font-mono); font-size: 11px; font-weight: 700;
   padding: 2px 7px; border-radius: 10px; letter-spacing: 0.05em;
-  flex-shrink: 0;
+  flex-shrink: 0; transition: box-shadow 0.2s;
 }
 .badge-low { background: rgba(0,230,118,0.15); color: var(--sev-green); border: 1px solid rgba(0,230,118,0.3); }
 .badge-mid { background: rgba(255,234,0,0.12); color: var(--sev-yellow); border: 1px solid rgba(255,234,0,0.3); }
 .badge-high { background: rgba(255,23,68,0.15); color: var(--sev-red); border: 1px solid rgba(255,23,68,0.35); }
-.card-meta { font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); margin-top: 4px; display: flex; gap: 8px; }
+.alert-card.selected .badge-high { box-shadow: 0 0 8px rgba(255,23,68,0.4); }
+.alert-card.selected .badge-mid  { box-shadow: 0 0 8px rgba(255,234,0,0.3); }
+.alert-card.selected .badge-low  { box-shadow: 0 0 8px rgba(0,230,118,0.3); }
+.card-meta { font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); margin-top: 5px; display: flex; gap: 8px; align-items: center; }
 .card-coords { font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); }
 
 /* ── DETAIL PANEL ────────────────────────────────────────── */
@@ -272,10 +298,10 @@ body::after {
   border-top: 1px solid var(--border);
   background: var(--bg-panel);
   overflow: hidden;
-  transition: max-height 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: max-height 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   max-height: 0;
 }
-#detail-panel.open { max-height: 340px; }
+#detail-panel.open { max-height: 360px; }
 
 #detail-inner { padding: 14px 16px; }
 .detail-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
@@ -289,25 +315,41 @@ body::after {
   font-size: 12px; display: flex; align-items: center; justify-content: center;
   transition: all 0.2s;
 }
-.detail-close:hover { border-color: var(--accent-red); color: var(--accent-red); }
-.detail-meta-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.detail-close:hover { border-color: var(--accent-red); color: var(--accent-red); background: rgba(255,59,59,0.08); }
+.detail-meta-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .detail-chip {
   font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
-  padding: 3px 8px; border-radius: 4px;
+  padding: 3px 9px; border-radius: 4px;
   background: rgba(0,180,255,0.08); border: 1px solid var(--border-bright);
   color: var(--text-secondary);
 }
 .detail-chip strong { color: var(--text-primary); }
 
 .sev-bar-wrap { margin-bottom: 12px; }
-.sev-bar-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-bottom: 4px; letter-spacing: 0.08em; }
-.sev-bar-track { height: 4px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
-.sev-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.sev-bar-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.08em; display: flex; justify-content: space-between; align-items: center; }
+.sev-bar-track { height: 5px; background: rgba(255,255,255,0.07); border-radius: 3px; overflow: hidden; }
+.sev-bar-fill { height: 100%; border-radius: 3px; transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
 
-#waveform-wrap { position: relative; height: 90px; }
-.chart-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); letter-spacing: 0.08em; margin-bottom: 4px; }
+/* ── WAVEFORM ────────────────────────────────────────────── */
+#waveform-wrap {
+  position: relative; height: 100px;
+  border-radius: 6px; overflow: hidden;
+  background: rgba(0,0,0,0.2);
+  padding: 2px;
+}
+.chart-label {
+  font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);
+  letter-spacing: 0.08em; margin-bottom: 6px;
+  display: flex; align-items: center; gap: 8px;
+}
+.chart-label::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-cyan); box-shadow: 0 0 4px var(--accent-cyan); }
+.waveform-peak-label {
+  font-family: var(--font-mono); font-size: 9px;
+  position: absolute; top: 4px; right: 8px;
+  color: rgba(255,255,255,0.5); z-index: 2; pointer-events: none;
+}
 
-/* ── MAP MARKERS (Mapbox fallback / custom) ──────────────── */
+/* ── MAP MARKERS (Mapbox) ────────────────────────────────── */
 .mapboxgl-popup-content {
   background: var(--bg-card) !important; border: 1px solid var(--border-bright) !important;
   border-radius: 8px !important; padding: 10px 14px !important;
@@ -318,10 +360,10 @@ body::after {
 .custom-marker {
   width: 14px; height: 14px; border-radius: 50%;
   border: 2px solid rgba(0,0,0,0.5);
-  cursor: pointer; transition: transform 0.2s;
-  box-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+  cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
   animation: marker-pulse 3s ease-in-out infinite;
 }
+.custom-marker:hover { transform: scale(1.5) !important; }
 @keyframes marker-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.2); opacity: 0.8; }
@@ -329,9 +371,9 @@ body::after {
 
 /* ── EMPTY STATE ─────────────────────────────────────────── */
 .empty-state {
-  padding: 30px 16px; text-align: center;
+  padding: 32px 16px; text-align: center;
   font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
-  letter-spacing: 0.08em; line-height: 1.8;
+  letter-spacing: 0.08em; line-height: 1.9;
 }
 
 /* ── LOADING SHIMMER ─────────────────────────────────────── */
@@ -365,17 +407,22 @@ body::after {
 .demo-marker {
   position: absolute; transform: translate(-50%,-50%);
   width: 16px; height: 16px; border-radius: 50%;
-  cursor: pointer; transition: transform 0.2s;
+  cursor: pointer; transition: transform 0.25s cubic-bezier(0.22,1,0.36,1);
   display: flex; align-items: center; justify-content: center;
 }
-.demo-marker:hover { transform: translate(-50%,-50%) scale(1.4); }
+.demo-marker:hover { transform: translate(-50%,-50%) scale(1.5); }
 .demo-marker-inner {
   width: 10px; height: 10px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.3);
+  transition: box-shadow 0.3s;
 }
 .demo-marker.sev-low .demo-marker-inner { background: var(--sev-green); box-shadow: 0 0 10px var(--sev-green); }
 .demo-marker.sev-mid .demo-marker-inner { background: var(--sev-yellow); box-shadow: 0 0 10px var(--sev-yellow); }
 .demo-marker.sev-high .demo-marker-inner { background: var(--sev-red); box-shadow: 0 0 10px var(--sev-red); }
+.demo-marker.selected-marker .demo-marker-inner {
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.3), 0 0 20px currentColor;
+  transform: scale(1.3);
+}
 .demo-ring {
   position: absolute; inset: -4px; border-radius: 50%;
   border: 1px solid currentColor; opacity: 0.4;
@@ -387,6 +434,16 @@ body::after {
 @keyframes ring-expand {
   0% { transform: scale(1); opacity: 0.5; }
   100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* ── DEMO MAP PAN ANIMATION ──────────────────────────────── */
+@keyframes demo-pan {
+  0%   { transform: scale(1) translate(0,0); }
+  50%  { transform: scale(1.08) translate(var(--pan-x), var(--pan-y)); }
+  100% { transform: scale(1.08) translate(var(--pan-x), var(--pan-y)); }
+}
+#demo-map.panning {
+  animation: demo-pan 0.5s cubic-bezier(0.22,1,0.36,1) forwards;
 }
 
 /* ── CITY LABEL ──────────────────────────────────────────── */
@@ -410,6 +467,151 @@ body::after {
   opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap;
 }
 #new-alert-toast.show { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE STYLES
+══════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Topbar: compact */
+  #topbar {
+    height: 50px; padding: 0 14px; gap: 10px;
+  }
+  .logo-text .brand-main { font-size: 14px; }
+  .tstat:not(:first-child) { display: none; }
+  .tstat-lbl { display: none; }
+  .tstat-val { font-size: 13px; }
+  .topbar-divider { display: none; }
+  .status-label { display: none; }
+  .time-display { font-size: 11px; }
+
+  /* Full-screen map */
+  #content { flex-direction: column; position: relative; }
+  #map-container {
+    flex: none;
+    width: 100%; height: 100%;
+    position: absolute; inset: 0;
+    border-right: none;
+  }
+
+  /* Heatmap toggle moves up on mobile */
+  #heatmap-toggle { top: 8px; right: 8px; font-size: 10px; padding: 4px 9px; }
+
+  /* Filter bar adjusts */
+  #filter-bar { top: 8px; left: 8px; gap: 4px; }
+  .filter-btn { padding: 4px 9px; font-size: 10px; }
+
+  /* ── BOTTOM SHEET ──────────────────────────────────────── */
+  #sidebar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: var(--sheet-height);
+    flex: none; width: 100%;
+    background: rgba(6, 13, 22, 0.97);
+    backdrop-filter: blur(20px) saturate(1.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+    border-top: 1px solid var(--border-bright);
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 40px rgba(0,0,0,0.6), 0 -1px 0 rgba(0,180,255,0.15);
+    z-index: 50;
+    transform: translateY(calc(100% - 52px));
+    transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+    overflow: hidden;
+  }
+  #sidebar.sheet-open {
+    transform: translateY(0);
+  }
+
+  /* Sheet drag handle */
+  #feed-header {
+    cursor: pointer;
+    padding: 0 16px;
+    height: 52px;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+  }
+  #feed-header::before {
+    content: '';
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 36px; height: 4px; border-radius: 2px;
+    background: rgba(0,180,255,0.25);
+  }
+
+  /* Feed content scrollable */
+  #feed-list {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 10px;
+  }
+
+  /* Detail panel in mobile sheet */
+  #detail-panel { max-height: 0; }
+  #detail-panel.open { max-height: 280px; }
+
+  /* Floating alerts toggle button */
+  #mobile-alerts-btn {
+    display: flex;
+  }
+}
+
+/* ── FLOATING ALERTS BUTTON (mobile only) ──────────────── */
+#mobile-alerts-btn {
+  display: none;
+  position: absolute;
+  bottom: 70px; right: 16px;
+  z-index: 200;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-bright);
+  color: var(--accent-cyan);
+  cursor: pointer;
+  align-items: center; justify-content: center;
+  font-size: 18px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 0 0 rgba(0,180,255,0.4);
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+  flex-direction: column; gap: 1px;
+}
+#mobile-alerts-btn .btn-count {
+  font-size: 9px; font-family: var(--font-mono); color: var(--accent-cyan);
+  line-height: 1; letter-spacing: 0.05em; font-weight: 700;
+}
+#mobile-alerts-btn:active { transform: scale(0.92); }
+#mobile-alerts-btn.has-critical {
+  border-color: rgba(255,23,68,0.5);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 12px rgba(255,23,68,0.25);
+  animation: btn-critical-pulse 2s ease-in-out infinite;
+}
+@keyframes btn-critical-pulse {
+  0%, 100% { box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 0 0 rgba(255,23,68,0.3); }
+  50% { box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 0 0 8px rgba(255,23,68,0); }
+}
+
+/* Swipe-up arrow in button */
+#mobile-alerts-btn .btn-icon {
+  font-size: 16px;
+  transition: transform 0.3s;
+}
+#sidebar.sheet-open ~ #mobile-alerts-btn .btn-icon,
+.sheet-open-icon { transform: rotate(180deg); }
+
+/* ── SMOOTH TRANSITIONS ────────────────────────────────── */
+.detail-chip { transition: background 0.2s, border-color 0.2s; }
+.sev-badge { transition: box-shadow 0.25s; }
+
+/* ── Touch ripple on cards ───────────────────────────────── */
+.alert-card .ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(0,180,255,0.12);
+  transform: scale(0);
+  animation: ripple 0.5s ease-out;
+  pointer-events: none;
+}
+@keyframes ripple {
+  to { transform: scale(4); opacity: 0; }
+}
 </style>
 </head>
 <body>
@@ -425,10 +627,12 @@ body::after {
         <line x1="16" y1="19" x2="16" y2="24" stroke="var(--accent-cyan)" stroke-width="1" opacity="0.5"/>
       </svg>
     </div>
-    <div class="logo-text">KINETIC <span>TRANSPORT</span> TRACKER</div>
+    <div class="logo-text">
+      <span class="brand-main">MINT</span>
+    </div>
     <div class="topbar-divider"></div>
     <div class="status-dot"></div>
-    <div class="status-label">LIVE FEED</div>
+    <div class="status-label">LIVE</div>
     <div class="topbar-stats">
       <div class="tstat">
         <div class="tstat-val" id="stat-total">0</div>
@@ -452,19 +656,17 @@ body::after {
     <div id="map-container">
       <div id="map"></div>
 
-      <!-- Demo fallback (shown when Mapbox not configured) -->
+      <!-- Demo fallback -->
       <div id="demo-map-container" style="position:absolute;inset:0;display:none;z-index:5;">
         <div class="map-grid"></div>
         <div id="demo-map"></div>
         <div class="city-label" style="left:15%;top:18%">BELGAUM SECTOR</div>
         <div class="city-label" style="left:52%;top:60%">DHARWAD DIST.</div>
         <div class="city-label" style="right:12%;top:30%">NH-48 CORRIDOR</div>
-        <!-- Road lines -->
         <div class="road-line" style="left:20%;top:25%;width:60%;height:1px;transform:rotate(-5deg)"></div>
         <div class="road-line" style="left:30%;top:10%;width:1px;height:80%"></div>
         <div class="road-line" style="left:60%;top:15%;width:1px;height:70%"></div>
         <div class="road-line" style="left:10%;top:50%;width:80%;height:1px;transform:rotate(8deg)"></div>
-        <!-- Markers injected by JS -->
       </div>
 
       <!-- Heatmap canvas -->
@@ -472,13 +674,13 @@ body::after {
 
       <!-- Controls -->
       <div id="filter-bar">
-        <button class="filter-btn fb-all"    data-filter="all"    data-active="true"  onclick="setFilter('all')">ALL</button>
-        <button class="filter-btn fb-green"  data-filter="low"    data-active="true"  onclick="setFilter('low')">LOW</button>
-        <button class="filter-btn fb-yellow" data-filter="mid"    data-active="true"  onclick="setFilter('mid')">MED</button>
-        <button class="filter-btn fb-red"    data-filter="high"   data-active="true"  onclick="setFilter('high')">HIGH</button>
+        <button class="filter-btn fb-all"    data-filter="all"  data-active="true"  onclick="setFilter('all')">ALL</button>
+        <button class="filter-btn fb-green"  data-filter="low"  data-active="true"  onclick="setFilter('low')">LOW</button>
+        <button class="filter-btn fb-yellow" data-filter="mid"  data-active="true"  onclick="setFilter('mid')">MED</button>
+        <button class="filter-btn fb-red"    data-filter="high" data-active="true"  onclick="setFilter('high')">HIGH</button>
       </div>
       <button id="heatmap-toggle" onclick="toggleHeatmap()">⬡ HEATMAP</button>
-      <div id="new-alert-toast">⚠ NEW ALERT INCOMING</div>
+      <div id="new-alert-toast">⚠ NEW ALERT</div>
 
       <div id="map-controls">
         <button class="map-btn" title="Zoom In"  onclick="mapZoom(1)">+</button>
@@ -486,9 +688,9 @@ body::after {
       </div>
     </div>
 
-    <!-- SIDEBAR -->
+    <!-- SIDEBAR / BOTTOM SHEET -->
     <aside id="sidebar">
-      <div id="feed-header">
+      <div id="feed-header" onclick="toggleMobileSheet()">
         <div class="feed-title">⬡ ALERT FEED</div>
         <div class="feed-count" id="feed-count">0 ACTIVE</div>
       </div>
@@ -507,7 +709,10 @@ body::after {
           </div>
           <div class="detail-meta-row" id="detail-meta"></div>
           <div class="sev-bar-wrap">
-            <div class="sev-bar-label">SEVERITY INDEX</div>
+            <div class="sev-bar-label">
+              <span>SEVERITY INDEX</span>
+              <span id="sev-bar-val" style="color:var(--text-primary);font-weight:700">—/10</span>
+            </div>
             <div class="sev-bar-track">
               <div class="sev-bar-fill" id="sev-bar" style="width:0%"></div>
             </div>
@@ -515,26 +720,33 @@ body::after {
           <div class="chart-label">ACCELEROMETER WAVEFORM</div>
           <div id="waveform-wrap">
             <canvas id="waveform-chart"></canvas>
+            <div class="waveform-peak-label" id="waveform-peak"></div>
           </div>
         </div>
       </div>
     </aside>
+
+    <!-- Mobile floating alerts button -->
+    <button id="mobile-alerts-btn" onclick="toggleMobileSheet()">
+      <span class="btn-icon">↑</span>
+      <span class="btn-count" id="mobile-btn-count">0</span>
+    </button>
   </div>
 </div>
 
 <script>
 // ══════════════════════════════════════════════════════════════
-//  DEMO DATA (used when Firebase isn't configured)
+//  DEMO DATA
 // ══════════════════════════════════════════════════════════════
 const DEMO_ISSUES = {
-  "issue_001": { lat: 15.8497, lng: 74.4977, label: "pothole",   severity: 9, timestamp: Date.now()/1000 - 120,  waveform: [0.1,0.3,0.8,2.4,3.1,2.8,1.2,0.4,0.1,0.2,0.5,1.8,2.2,1.5,0.3] },
-  "issue_002": { lat: 15.8550, lng: 74.5050, label: "bump",      severity: 4, timestamp: Date.now()/1000 - 360,  waveform: [0.2,0.4,0.9,1.1,0.8,0.5,0.3,0.4,0.7,0.9,0.6,0.3] },
-  "issue_003": { lat: 15.8430, lng: 74.5120, label: "pothole",   severity: 7, timestamp: Date.now()/1000 - 900,  waveform: [0.1,0.2,1.0,2.0,3.5,2.8,1.6,0.8,0.3,0.1,0.4,1.2,1.8,1.0,0.2] },
-  "issue_004": { lat: 15.8610, lng: 74.4900, label: "crack",     severity: 2, timestamp: Date.now()/1000 - 1800, waveform: [0.1,0.2,0.3,0.4,0.3,0.2,0.3,0.4,0.3,0.2,0.1] },
-  "issue_005": { lat: 15.8510, lng: 74.5200, label: "pothole",   severity: 8, timestamp: Date.now()/1000 - 2700, waveform: [0.2,0.5,1.6,2.1,0.3,0.1,2.8,3.2,1.4,0.5,0.2] },
-  "issue_006": { lat: 15.8460, lng: 74.4850, label: "subsidence",severity: 5, timestamp: Date.now()/1000 - 3600, waveform: [0.3,0.6,0.9,1.1,1.3,1.2,1.0,0.8,0.6,0.4,0.3] },
-  "issue_007": { lat: 15.8580, lng: 74.5080, label: "pothole",   severity: 10,timestamp: Date.now()/1000 - 180,  waveform: [0.1,0.4,1.2,3.5,4.0,3.8,2.2,1.0,0.4,0.1,0.3,1.5,2.8,3.1,1.2] },
-  "issue_008": { lat: 15.8490, lng: 74.5150, label: "debris",    severity: 3, timestamp: Date.now()/1000 - 7200, waveform: [0.2,0.3,0.5,0.4,0.3,0.5,0.4,0.3,0.2,0.3,0.4] },
+  "issue_001": { lat: 15.8497, lng: 74.4977, label: "pothole",    severity: 9,  timestamp: Date.now()/1000 - 120,  waveform: [0.1,0.3,0.8,2.4,3.1,2.8,1.2,0.4,0.1,0.2,0.5,1.8,2.2,1.5,0.3] },
+  "issue_002": { lat: 15.8550, lng: 74.5050, label: "bump",       severity: 4,  timestamp: Date.now()/1000 - 360,  waveform: [0.2,0.4,0.9,1.1,0.8,0.5,0.3,0.4,0.7,0.9,0.6,0.3] },
+  "issue_003": { lat: 15.8430, lng: 74.5120, label: "pothole",    severity: 7,  timestamp: Date.now()/1000 - 900,  waveform: [0.1,0.2,1.0,2.0,3.5,2.8,1.6,0.8,0.3,0.1,0.4,1.2,1.8,1.0,0.2] },
+  "issue_004": { lat: 15.8610, lng: 74.4900, label: "crack",      severity: 2,  timestamp: Date.now()/1000 - 1800, waveform: [0.1,0.2,0.3,0.4,0.3,0.2,0.3,0.4,0.3,0.2,0.1] },
+  "issue_005": { lat: 15.8510, lng: 74.5200, label: "pothole",    severity: 8,  timestamp: Date.now()/1000 - 2700, waveform: [0.2,0.5,1.6,2.1,0.3,0.1,2.8,3.2,1.4,0.5,0.2] },
+  "issue_006": { lat: 15.8460, lng: 74.4850, label: "subsidence", severity: 5,  timestamp: Date.now()/1000 - 3600, waveform: [0.3,0.6,0.9,1.1,1.3,1.2,1.0,0.8,0.6,0.4,0.3] },
+  "issue_007": { lat: 15.8580, lng: 74.5080, label: "pothole",    severity: 10, timestamp: Date.now()/1000 - 180,  waveform: [0.1,0.4,1.2,3.5,4.0,3.8,2.2,1.0,0.4,0.1,0.3,1.5,2.8,3.1,1.2] },
+  "issue_008": { lat: 15.8490, lng: 74.5150, label: "debris",     severity: 3,  timestamp: Date.now()/1000 - 7200, waveform: [0.2,0.3,0.5,0.4,0.3,0.5,0.4,0.3,0.2,0.3,0.4] },
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -548,6 +760,8 @@ let mapInstance = null;
 let markers = {};
 let waveformChart = null;
 let demoMode = false;
+let sheetOpen = false;
+let isMobile = () => window.innerWidth <= 768;
 
 // ══════════════════════════════════════════════════════════════
 //  UTILITY
@@ -558,9 +772,14 @@ function getSevClass(sev) {
   return 'sev-high';
 }
 function getSevColor(sev) {
-  if (sev <= 3) return 'var(--sev-green)';
-  if (sev <= 6) return 'var(--sev-yellow)';
-  return 'var(--sev-red)';
+  if (sev <= 3) return '#00e676';
+  if (sev <= 6) return '#ffea00';
+  return '#ff1744';
+}
+function getSevColorRGB(sev) {
+  if (sev <= 3) return '0,230,118';
+  if (sev <= 6) return '255,234,0';
+  return '255,23,68';
 }
 function getBadgeClass(sev) {
   if (sev <= 3) return 'badge-low';
@@ -569,8 +788,8 @@ function getBadgeClass(sev) {
 }
 function relativeTime(ts) {
   const diff = Math.floor(Date.now()/1000 - ts);
-  if (diff < 60)  return diff + 's ago';
-  if (diff < 3600)return Math.floor(diff/60) + 'm ago';
+  if (diff < 60)   return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
   return Math.floor(diff/3600) + 'h ago';
 }
 function updateClock() {
@@ -584,6 +803,54 @@ setInterval(updateClock, 1000);
 updateClock();
 
 // ══════════════════════════════════════════════════════════════
+//  MOBILE SHEET
+// ══════════════════════════════════════════════════════════════
+function toggleMobileSheet() {
+  if (!isMobile()) return;
+  sheetOpen = !sheetOpen;
+  const sidebar = document.getElementById('sidebar');
+  const btn = document.getElementById('mobile-alerts-btn');
+  sidebar.classList.toggle('sheet-open', sheetOpen);
+  const icon = btn.querySelector('.btn-icon');
+  icon.textContent = sheetOpen ? '↓' : '↑';
+}
+
+function openMobileSheet() {
+  if (!isMobile() || sheetOpen) return;
+  sheetOpen = true;
+  document.getElementById('sidebar').classList.add('sheet-open');
+  document.getElementById('mobile-alerts-btn').querySelector('.btn-icon').textContent = '↓';
+}
+
+// Touch swipe for bottom sheet
+(function() {
+  let startY = 0, startTime = 0;
+  const sidebar = document.getElementById('sidebar');
+
+  sidebar.addEventListener('touchstart', e => {
+    startY = e.touches[0].clientY;
+    startTime = Date.now();
+  }, { passive: true });
+
+  sidebar.addEventListener('touchend', e => {
+    const dy = e.changedTouches[0].clientY - startY;
+    const dt = Date.now() - startTime;
+    const velocity = Math.abs(dy) / dt;
+    if (velocity > 0.3 || Math.abs(dy) > 60) {
+      if (dy > 0 && sheetOpen) {
+        sheetOpen = false;
+        sidebar.classList.remove('sheet-open');
+        document.getElementById('mobile-alerts-btn').querySelector('.btn-icon').textContent = '↑';
+      } else if (dy < 0 && !sheetOpen) {
+        sheetOpen = true;
+        sidebar.classList.add('sheet-open');
+        document.getElementById('mobile-alerts-btn').querySelector('.btn-icon').textContent = '↓';
+      }
+    }
+  }, { passive: true });
+})();
+
+// ══════════════════════════════════════════════════════════════
 //  FILTER
 // ══════════════════════════════════════════════════════════════
 function setFilter(f) {
@@ -594,11 +861,9 @@ function setFilter(f) {
   renderFeed();
   renderMarkers();
 }
-
 function isVisible(issue) {
   if (activeFilter === 'all') return true;
-  const cls = getSevClass(issue.severity);
-  return cls === 'sev-' + activeFilter;
+  return getSevClass(issue.severity) === 'sev-' + activeFilter;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -612,6 +877,11 @@ function updateStats() {
   document.getElementById('stat-critical').textContent = critical;
   document.getElementById('stat-avg').textContent = avg;
   document.getElementById('feed-count').textContent = all.length + ' ACTIVE';
+
+  // Mobile button
+  const btn = document.getElementById('mobile-alerts-btn');
+  document.getElementById('mobile-btn-count').textContent = all.length;
+  btn.classList.toggle('has-critical', critical > 0);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -619,13 +889,11 @@ function updateStats() {
 // ══════════════════════════════════════════════════════════════
 function renderFeed() {
   const list = document.getElementById('feed-list');
-  const empty = document.getElementById('empty-state');
   const sorted = Object.entries(issues)
     .filter(([,i]) => isVisible(i))
     .sort((a,b) => b[1].timestamp - a[1].timestamp);
 
   if (sorted.length === 0) {
-    list.innerHTML = '';
     const msg = Object.keys(issues).length === 0
       ? 'CONNECTING TO FIREBASE...\nAWAITING TELEMETRY DATA'
       : 'NO ISSUES MATCHING FILTER';
@@ -637,12 +905,10 @@ function renderFeed() {
   list.querySelectorAll('.alert-card').forEach(el => existing.add(el.dataset.id));
   const incoming = new Set(sorted.map(([id]) => id));
 
-  // Remove deleted
   list.querySelectorAll('.alert-card').forEach(el => {
     if (!incoming.has(el.dataset.id)) el.remove();
   });
 
-  // Insert/update (prepend new ones)
   sorted.forEach(([id, issue], idx) => {
     let card = list.querySelector(`[data-id="${id}"]`);
     const sevCls = getSevClass(issue.severity);
@@ -662,12 +928,28 @@ function renderFeed() {
       card.className = `alert-card ${sevCls}`;
       card.dataset.id = id;
       card.style.animationDelay = (idx * 0.05) + 's';
-      card.onclick = () => selectIssue(id);
+      card.onclick = (e) => {
+        addRipple(card, e);
+        selectIssue(id);
+      };
       list.prepend(card);
     }
     card.innerHTML = html;
     card.classList.toggle('selected', id === selectedId);
   });
+}
+
+// Card ripple
+function addRipple(card, e) {
+  const rect = card.getBoundingClientRect();
+  const r = document.createElement('span');
+  r.className = 'ripple';
+  r.style.left = (e.clientX - rect.left) + 'px';
+  r.style.top  = (e.clientY - rect.top) + 'px';
+  r.style.width = r.style.height = Math.max(rect.width, rect.height) / 2 + 'px';
+  r.style.marginLeft = r.style.marginTop = '-' + (Math.max(rect.width, rect.height) / 4) + 'px';
+  card.appendChild(r);
+  setTimeout(() => r.remove(), 600);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -687,35 +969,81 @@ function selectIssue(id) {
 
   document.getElementById('detail-label').textContent = issue.label.toUpperCase() + ' DETECTED';
   document.getElementById('detail-meta').innerHTML = `
-    <div class="detail-chip"><strong>SEV:</strong> ${issue.severity}/10</div>
-    <div class="detail-chip"><strong>LAT:</strong> ${issue.lat.toFixed(5)}</div>
-    <div class="detail-chip"><strong>LNG:</strong> ${issue.lng.toFixed(5)}</div>
-    <div class="detail-chip"><strong>TIME:</strong> ${relativeTime(issue.timestamp)}</div>
+    <div class="detail-chip"><strong>SEV</strong> ${issue.severity}/10</div>
+    <div class="detail-chip"><strong>LAT</strong> ${issue.lat.toFixed(5)}</div>
+    <div class="detail-chip"><strong>LNG</strong> ${issue.lng.toFixed(5)}</div>
+    <div class="detail-chip"><strong>T</strong> ${relativeTime(issue.timestamp)}</div>
   `;
 
   const bar = document.getElementById('sev-bar');
   bar.style.width = (issue.severity * 10) + '%';
-  bar.style.background = getSevColor(issue.severity);
-  if (issue.severity >= 7) bar.style.boxShadow = '0 0 8px ' + getSevColor(issue.severity);
+  bar.style.background = `linear-gradient(90deg, ${getSevColor(issue.severity)}aa, ${getSevColor(issue.severity)})`;
+  bar.style.boxShadow = issue.severity >= 7 ? '0 0 8px ' + getSevColor(issue.severity) : 'none';
+  document.getElementById('sev-bar-val').textContent = issue.severity + '/10';
+  document.getElementById('sev-bar-val').style.color = getSevColor(issue.severity);
 
-  renderWaveform(issue.waveform, issue.severity);
-  if (demoMode) panDemoMap(id);
-  else if (mapInstance) mapInstance.flyTo({ center: [issue.lng, issue.lat], zoom: 16 });
+  renderWaveform(issue.waveform || generateWaveform(issue.severity), issue.severity);
+
+  // Map focus
+  if (demoMode) {
+    panDemoMap(id, issue);
+  } else if (mapInstance) {
+    mapInstance.flyTo({
+      center: [issue.lng, issue.lat],
+      zoom: 16,
+      speed: 1.4,
+      curve: 1.2,
+      essential: true
+    });
+    // Pulse the marker
+    setTimeout(() => pulseMapboxMarker(id, issue.severity), 600);
+  }
+
+  // On mobile, open sheet if closed
+  if (isMobile() && !sheetOpen) openMobileSheet();
 }
 
 function closeDetail() {
   selectedId = null;
   document.getElementById('detail-panel').classList.remove('open');
   document.querySelectorAll('.alert-card').forEach(el => el.classList.remove('selected'));
+  document.querySelectorAll('.demo-marker').forEach(el => el.classList.remove('selected-marker'));
 }
 
 // ══════════════════════════════════════════════════════════════
-//  WAVEFORM CHART
+//  WAVEFORM CHART (upgraded)
 // ══════════════════════════════════════════════════════════════
+function generateWaveform(severity) {
+  const len = 16;
+  const base = severity / 10;
+  return Array.from({ length: len }, (_, i) => {
+    const t = i / len;
+    return Math.max(0, base * (0.5 + Math.sin(t * Math.PI * 3) * 0.5 + (Math.random() - 0.5) * 0.4));
+  });
+}
+
 function renderWaveform(wf, severity) {
+  if (!wf || wf.length === 0) wf = generateWaveform(severity);
   const ctx = document.getElementById('waveform-chart').getContext('2d');
   if (waveformChart) waveformChart.destroy();
+
   const color = getSevColor(severity);
+  const rgb   = getSevColorRGB(severity);
+
+  // Find peak index
+  const maxVal = Math.max(...wf);
+  const peakIdx = wf.indexOf(maxVal);
+  document.getElementById('waveform-peak').textContent = `PEAK ${maxVal.toFixed(2)}g @ t${peakIdx}`;
+
+  // Gradient fill
+  const gradient = ctx.createLinearGradient(0, 0, 0, 100);
+  gradient.addColorStop(0,   `rgba(${rgb}, 0.35)`);
+  gradient.addColorStop(0.6, `rgba(${rgb}, 0.08)`);
+  gradient.addColorStop(1,   `rgba(${rgb}, 0)`);
+
+  // Point colors: highlight peak
+  const pointColors = wf.map((v, i) => i === peakIdx ? '#ffffff' : `rgba(${rgb}, 0.7)`);
+  const pointRadii  = wf.map((v, i) => i === peakIdx ? 5 : (v > maxVal * 0.7 ? 3 : 2));
 
   waveformChart = new Chart(ctx, {
     type: 'line',
@@ -724,45 +1052,79 @@ function renderWaveform(wf, severity) {
       datasets: [{
         data: wf,
         borderColor: color,
-        backgroundColor: color.replace('var(', '').replace(')', '') === '--sev-red'
-          ? 'rgba(255,23,68,0.08)' : severity > 6
-          ? 'rgba(255,23,68,0.08)' : severity > 3
-          ? 'rgba(255,234,0,0.06)' : 'rgba(0,230,118,0.06)',
-        borderWidth: 2,
-        tension: 0.5,
+        borderWidth: 2.5,
+        tension: 0.45,
         fill: true,
-        pointRadius: 3,
-        pointBackgroundColor: color,
+        backgroundColor: gradient,
+        pointRadius: pointRadii,
+        pointBackgroundColor: pointColors,
         pointBorderColor: 'transparent',
-        pointHoverRadius: 5,
+        pointHoverRadius: 6,
+        segment: {
+          borderColor: ctx => {
+            // neon glow via shadow (CSS only approach via borderColor can't do shadow, but we can vary intensity)
+            return color;
+          }
+        }
       }]
     },
     options: {
-      animation: { duration: 600, easing: 'easeOutCubic' },
+      animation: {
+        duration: 700,
+        easing: 'easeOutQuart',
+        onProgress(animation) {
+          // subtle scale-in feel
+        }
+      },
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: {
-        callbacks: { label: ctx => 'g: ' + ctx.raw.toFixed(2) },
-        backgroundColor: 'rgba(6,13,20,0.95)',
-        borderColor: 'rgba(0,180,255,0.3)',
-        borderWidth: 1,
-        titleFont: { family: 'Space Mono' },
-        bodyFont: { family: 'Space Mono', size: 11 },
-      }},
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: c => `${c.raw.toFixed(2)}g${c.dataIndex === peakIdx ? ' ← PEAK' : ''}`
+          },
+          backgroundColor: 'rgba(6,13,20,0.95)',
+          borderColor: `rgba(${rgb}, 0.4)`,
+          borderWidth: 1,
+          titleFont: { family: 'Space Mono', size: 10 },
+          bodyFont:  { family: 'Space Mono', size: 11 },
+          titleColor: `rgba(${rgb}, 0.8)`,
+          bodyColor:  '#e8f4ff',
+          padding: 8,
+          displayColors: false,
+        }
+      },
       scales: {
         x: { display: false },
         y: {
-          grid: { color: 'rgba(0,180,255,0.06)' },
-          ticks: { font: { family: 'Space Mono', size: 9 }, color: 'rgba(120,170,210,0.45)', maxTicksLimit: 4 },
+          grid: { color: `rgba(${rgb}, 0.06)` },
+          ticks: {
+            font: { family: 'Space Mono', size: 9 },
+            color: 'rgba(120,170,210,0.45)',
+            maxTicksLimit: 4
+          },
           border: { color: 'transparent' }
         }
       }
     }
   });
+
+  // Apply glow via canvas shadow (post-render)
+  setTimeout(() => {
+    if (waveformChart) {
+      const canvas = document.getElementById('waveform-chart');
+      const c = canvas.getContext('2d');
+      c.save();
+      c.shadowColor = color;
+      c.shadowBlur = severity >= 7 ? 12 : severity >= 4 ? 6 : 3;
+      c.restore();
+    }
+  }, 50);
 }
 
 // ══════════════════════════════════════════════════════════════
-//  DEMO MAP (no Mapbox key needed)
+//  DEMO MAP
 // ══════════════════════════════════════════════════════════════
 function lnglatToPercent(lat, lng) {
   const centerLat = 15.852, centerLng = 74.505;
@@ -779,7 +1141,6 @@ function renderMarkers() {
 
 function renderDemoMarkers() {
   const container = document.getElementById('demo-map');
-  // Remove old markers
   container.querySelectorAll('.demo-marker').forEach(el => el.remove());
 
   Object.entries(issues).forEach(([id, issue]) => {
@@ -787,71 +1148,67 @@ function renderDemoMarkers() {
     const { x, y } = lnglatToPercent(issue.lat, issue.lng);
     const sevCls = getSevClass(issue.severity);
     const marker = document.createElement('div');
-    marker.className = `demo-marker ${sevCls}`;
+    marker.className = `demo-marker ${sevCls}${id === selectedId ? ' selected-marker' : ''}`;
     marker.style.left = x + '%';
     marker.style.top  = y + '%';
     marker.dataset.id = id;
+    marker.dataset.x  = x;
+    marker.dataset.y  = y;
     marker.style.animationDelay = (Math.random() * 2) + 's';
-    marker.innerHTML = `
-      <div class="demo-ring"></div>
-      <div class="demo-marker-inner"></div>
-    `;
-    marker.onclick = () => selectIssue(id);
+    marker.innerHTML = `<div class="demo-ring"></div><div class="demo-marker-inner"></div>`;
+    marker.onclick = (e) => { e.stopPropagation(); selectIssue(id); };
     container.appendChild(marker);
   });
-
   if (heatmapOn) drawHeatmap();
 }
 
-function panDemoMap(id) {
-  // Visual feedback: flash the selected marker
-  const marker = document.querySelector(`.demo-marker[data-id="${id}"]`);
-  if (marker) {
-    marker.style.transform = 'translate(-50%,-50%) scale(2)';
-    setTimeout(() => marker.style.transform = '', 400);
-  }
+function panDemoMap(id, issue) {
+  const container = document.getElementById('demo-map');
+  const marker = container.querySelector(`.demo-marker[data-id="${id}"]`);
+  if (!marker) return;
+
+  // Highlight marker
+  container.querySelectorAll('.demo-marker').forEach(m => m.classList.remove('selected-marker'));
+  marker.classList.add('selected-marker');
+
+  // Pan: translate map so marker is centered
+  const mx = parseFloat(marker.dataset.x);
+  const my = parseFloat(marker.dataset.y);
+  const panX = (50 - mx) * 0.3;
+  const panY = (50 - my) * 0.3;
+  container.style.setProperty('--pan-x', panX + '%');
+  container.style.setProperty('--pan-y', panY + '%');
+  container.classList.remove('panning');
+  void container.offsetWidth; // force reflow
+  container.classList.add('panning');
+
+  // Pulse ring
+  const pulse = document.createElement('div');
+  pulse.className = 'demo-marker-pulse';
+  pulse.style.left = marker.style.left;
+  pulse.style.top  = marker.style.top;
+  pulse.style.color = getSevColor(issue.severity);
+  container.appendChild(pulse);
+  setTimeout(() => pulse.remove(), 800);
+
+  setTimeout(() => marker.style.transform = '', 400);
 }
 
 // ══════════════════════════════════════════════════════════════
 //  MAPBOX INTEGRATION
 // ══════════════════════════════════════════════════════════════
-
 function initMapbox() {
   try {
-    console.log("Mapbox loading...");
-    console.log("Using token:", MAPBOX_TOKEN);
     const script = document.createElement('script');
     script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js';
 
     script.onload = () => {
-      console.log("Mapbox script loaded");
+      if (!window.mapboxgl) { fallbackToDemo(); return; }
 
-      if (!window.mapboxgl) {
-        fallbackToDemo();
-        return;
-      }
-
-      // ✅ THIS IS CORRECT PLACE
-      window.mapboxgl.accessToken = MAPBOX_TOKEN;
-
-      mapInstance = new window.mapboxgl.Map({
-        container: 'map',
-        style: 'mapbox://styles/mapbox/dark-v11',
-        center: [74.5050, 15.8497],
-        zoom: 13,
-      });
-    
-
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
-      document.head.appendChild(link);
-
-      if (!window.mapboxgl) {
-        console.error("Mapbox failed → fallback");
-        fallbackToDemo();
-        return;
-      }
+      const cssLink = document.createElement('link');
+      cssLink.rel = 'stylesheet';
+      cssLink.href = 'https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css';
+      document.head.appendChild(cssLink);
 
       window.mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -863,7 +1220,6 @@ function initMapbox() {
       });
 
       mapInstance.on('load', () => {
-        console.log("Mapbox initialized");
         demoMode = false;
         document.getElementById('demo-map-container').style.display = 'none';
         document.getElementById('map').style.display = 'block';
@@ -871,30 +1227,23 @@ function initMapbox() {
       });
     };
 
-    script.onerror = () => {
-      console.error("Mapbox failed to load → fallback");
-      fallbackToDemo();
-    };
-
+    script.onerror = () => fallbackToDemo();
     document.head.appendChild(script);
-
-  } catch (e) {
-    console.error("Mapbox crash → fallback", e);
+  } catch(e) {
     fallbackToDemo();
   }
 }
-function fallbackToDemo() {
-  console.log("Switching to demo mode");
 
+function fallbackToDemo() {
   demoMode = true;
   document.getElementById('map').style.display = 'none';
   document.getElementById('demo-map-container').style.display = 'block';
-
   renderMarkers();
 }
+
 function renderMapboxMarkers() {
   if (!mapInstance) return;
-  Object.entries(markers).forEach(([id, m]) => m.remove());
+  Object.values(markers).forEach(m => m.remove());
   markers = {};
 
   Object.entries(issues).forEach(([id, issue]) => {
@@ -902,13 +1251,38 @@ function renderMapboxMarkers() {
     const el = document.createElement('div');
     el.className = `custom-marker ${getSevClass(issue.severity)}`;
     const c = getSevColor(issue.severity);
-    el.style.cssText = `background:${c};width:14px;height:14px;border-radius:50%;cursor:pointer;box-shadow:0 0 12px ${c};border:2px solid rgba(0,0,0,0.3);`;
+    el.style.cssText = `background:${c};width:14px;height:14px;border-radius:50%;cursor:pointer;box-shadow:0 0 12px ${c};border:2px solid rgba(0,0,0,0.3);transition:transform 0.2s,box-shadow 0.2s;`;
     el.onclick = () => selectIssue(id);
-
+    el.dataset.id = id;
     markers[id] = new window.mapboxgl.Marker({ element: el })
       .setLngLat([issue.lng, issue.lat])
       .addTo(mapInstance);
   });
+}
+
+function pulseMapboxMarker(id, severity) {
+  const markerObj = markers[id];
+  if (!markerObj) return;
+  const el = markerObj.getElement();
+  if (!el) return;
+  const c = getSevColor(severity);
+  el.style.transition = 'none';
+  // Three-pulse sequence
+  let step = 0;
+  const pulse = setInterval(() => {
+    if (step % 2 === 0) {
+      el.style.transform = 'scale(2.2)';
+      el.style.boxShadow = `0 0 0 6px rgba(${getSevColorRGB(severity)}, 0.3), 0 0 20px ${c}`;
+    } else {
+      el.style.transform = 'scale(1)';
+      el.style.boxShadow = `0 0 12px ${c}`;
+    }
+    step++;
+    if (step >= 6) {
+      clearInterval(pulse);
+      el.style.transition = 'transform 0.2s,box-shadow 0.2s';
+    }
+  }, 180);
 }
 
 function mapZoom(dir) {
@@ -916,13 +1290,12 @@ function mapZoom(dir) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  HEATMAP (canvas-based)
+//  HEATMAP
 // ══════════════════════════════════════════════════════════════
 function toggleHeatmap() {
   heatmapOn = !heatmapOn;
-  const toggle = document.getElementById('heatmap-toggle');
+  document.getElementById('heatmap-toggle').classList.toggle('active', heatmapOn);
   const canvas = document.getElementById('heatmap-canvas');
-  toggle.classList.toggle('active', heatmapOn);
   canvas.style.display = heatmapOn ? 'block' : 'none';
   if (heatmapOn) drawHeatmap();
 }
@@ -942,17 +1315,10 @@ function drawHeatmap() {
     const r  = 80 + issue.severity * 8;
     const g  = ctx.createRadialGradient(px, py, 0, px, py, r);
     const intensity = issue.severity / 10;
-    if (issue.severity >= 7) {
-      g.addColorStop(0,   `rgba(255,23,68,${0.5 * intensity})`);
-      g.addColorStop(0.5, `rgba(255,100,0,${0.2 * intensity})`);
-    } else if (issue.severity >= 4) {
-      g.addColorStop(0,   `rgba(255,234,0,${0.4 * intensity})`);
-      g.addColorStop(0.5, `rgba(255,150,0,${0.15 * intensity})`);
-    } else {
-      g.addColorStop(0,   `rgba(0,230,118,${0.35 * intensity})`);
-      g.addColorStop(0.5, `rgba(0,180,100,${0.12 * intensity})`);
-    }
-    g.addColorStop(1, 'rgba(0,0,0,0)');
+    const rgb = getSevColorRGB(issue.severity);
+    g.addColorStop(0,   `rgba(${rgb},${0.5 * intensity})`);
+    g.addColorStop(0.5, `rgba(${rgb},${0.18 * intensity})`);
+    g.addColorStop(1,   'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(px, py, r, 0, Math.PI * 2);
@@ -961,7 +1327,7 @@ function drawHeatmap() {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  NEW ALERT TOAST
+//  TOAST
 // ══════════════════════════════════════════════════════════════
 function showToast() {
   const toast = document.getElementById('new-alert-toast');
@@ -970,14 +1336,11 @@ function showToast() {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  FIREBASE INTEGRATION
+//  FIREBASE
 // ══════════════════════════════════════════════════════════════
 function startFirebase() {
   const { db, ref, onValue } = window.__firebaseReady || {};
-  if (!db) {
-    console.error("Firebase not connected");
-    return;
-  }
+  if (!db) { console.error("Firebase not connected"); return; }
 
   onValue(ref(db, '/alerts'), (snapshot) => {
     const data = snapshot.val() || {};
@@ -986,11 +1349,9 @@ function startFirebase() {
     const transformed = {};
     Object.entries(data).forEach(([id, alert]) => {
       if (!alert.location) return;
-
       let sev = 3;
-      if (alert.severity === "high") sev = 9;
+      if (alert.severity === "high")   sev = 9;
       else if (alert.severity === "medium") sev = 6;
-
       transformed[id] = {
         lat: alert.location.lat,
         lng: alert.location.lng,
@@ -999,7 +1360,6 @@ function startFirebase() {
         timestamp: Math.floor(new Date(alert.timestamp_utc).getTime() / 1000)
       };
     });
-
     issues = transformed;
     const nowSize = Object.keys(issues).length;
     updateStats();
@@ -1011,7 +1371,6 @@ function startFirebase() {
 }
 
 function loadDemoData() {
-  // Simulate streaming arrival with staggered timeouts
   issues = {};
   const entries = Object.entries(DEMO_ISSUES);
   entries.forEach(([id, issue], i) => {
@@ -1024,8 +1383,6 @@ function loadDemoData() {
       if (heatmapOn) drawHeatmap();
     }, 300 + i * 400);
   });
-
-  // Simulate new issue arriving
   setTimeout(() => {
     const newId = 'issue_new_' + Date.now();
     issues[newId] = {
@@ -1048,33 +1405,25 @@ function loadDemoData() {
 window.addEventListener('DOMContentLoaded', () => {
   initMapbox();
 
-  // fallback safety (if map not loaded in 2s)
-  setTimeout(() => {
-    if (!mapInstance) {
-      fallbackToDemo();
-    }
-  }, 2000);
+  setTimeout(() => { if (!mapInstance) fallbackToDemo(); }, 2000);
 
-  // Wait for Firebase module to load
   const tryStart = () => {
-    if (window.__firebaseReady) {
-      startFirebase();
-    } else {
-      setTimeout(tryStart, 100);
-    }
+    if (window.__firebaseReady) startFirebase();
+    else setTimeout(tryStart, 100);
   };
-  // If firebase config invalid, fall to demo after 2s
-  setTimeout(() => {
-    if (Object.keys(issues).length === 0) loadDemoData();
-  }, 2000);
+  setTimeout(() => { if (Object.keys(issues).length === 0) loadDemoData(); }, 2000);
   tryStart();
 
-  // Live timestamp refresh
   setInterval(() => renderFeed(), 30000);
-  // Heatmap resize
-  window.addEventListener('resize', () => { if (heatmapOn) drawHeatmap(); });
+  window.addEventListener('resize', () => {
+    if (heatmapOn) drawHeatmap();
+    // Re-evaluate mobile layout on resize
+    if (!isMobile()) {
+      document.getElementById('sidebar').classList.remove('sheet-open');
+      sheetOpen = false;
+    }
+  });
 });
-
 </script>
 </body>
 </html>
