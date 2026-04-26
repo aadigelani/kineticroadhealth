@@ -1029,6 +1029,15 @@ function generateWaveform(severity) {
 }
 
 function renderWaveform(wf, severity) {
+  if (!wf) wf = [];
+
+  if (!Array.isArray(wf)) {
+    wf = Object.values(wf);
+  }
+
+  if (wf.length === 0) {
+    wf = generateWaveform(severity);
+  }
   if (!wf || wf.length === 0) wf = generateWaveform(severity);
   const ctx = document.getElementById('waveform-chart').getContext('2d');
   if (waveformChart) waveformChart.destroy();
