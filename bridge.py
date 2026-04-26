@@ -386,16 +386,25 @@ class SpikeListener:
         self._lock  = threading.Lock()
 
     def start(self) -> None:
-        log.info("Starting Firebase listener thread...")
-
-        def run_listener():
-            db.reference(SPIKES_PATH).listen(self._on_spike_event)
-
-        threading.Thread(target=run_listener, daemon=True).start()
+        log.info("Polling on %s — spike threshold: %.1f g", SPIKES_PATH, SPIKE_THRESHOLD_G)
 
         while True:
-            time.sleep(60)
+            try:
+                spikes = db.reference(SPIKES_PATH).get() or {}
 
+                for spike_id, spike in spikes.items():
+                    with self._lock:
+                        if spike_id in self._seen:
+                            continue
+                        self._seen.add(spike_id)
+
+                    log.info("Spike detected via polling: %s", spike_id)
+                    self._handle_spike(spike_id, spike)
+
+            except Exception as e:
+                log.error("Polling error: %s", e)
+
+            time.sleep(2)  # check every 2 sec
     def _on_spike_event(self, event) -> None:
         """
         Called by Firebase SDK on every change under /spikes.
