@@ -1352,25 +1352,31 @@ function startFirebase() {
     const data = snapshot.val() || {};
     const isFirst = Object.keys(issues).length === 0;
     const wasSize = Object.keys(issues).length;
+
     const transformed = {};
+
     Object.entries(data).forEach(([id, alert]) => {
-      if (!alert.location) return;
-      let sev = 3;
-      if (alert.severity === "high")   sev = 9;
-      else if (alert.severity === "medium") sev = 6;
+      if (!alert.lat || !alert.lng) return;
+
       transformed[id] = {
-        lat: alert.location.lat,
-        lng: alert.location.lng,
-        label: alert.classification || "unknown",
-        severity: sev,
-        timestamp: Math.floor(new Date(alert.timestamp_utc).getTime() / 1000)
+        id,
+        lat: alert.lat,
+        lng: alert.lng,
+        label: alert.label || "unknown",
+        severity: alert.severity || 5,
+        timestamp: alert.timestamp || Date.now()/1000,
+        waveform: alert.waveform || []
       };
     });
+
     issues = transformed;
+
     const nowSize = Object.keys(issues).length;
+
     updateStats();
     renderFeed();
     renderMarkers();
+
     if (!isFirst && nowSize > wasSize) showToast();
     if (heatmapOn) drawHeatmap();
   });
