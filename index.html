@@ -491,6 +491,7 @@ body::after {
     width: 100%; height: 100%;
     position: absolute; inset: 0;
     border-right: none;
+    padding-bottom: 70px;
   }
 
   /* Heatmap toggle moves up on mobile */
@@ -503,7 +504,7 @@ body::after {
   /* ── BOTTOM SHEET ──────────────────────────────────────── */
   #sidebar {
     position: absolute; bottom: 0; left: 0; right: 0;
-    height: var(--sheet-height);
+    height: 70vh;
     flex: none; width: 100%;
     background: rgba(6, 13, 22, 0.97);
     backdrop-filter: blur(20px) saturate(1.5);
@@ -512,8 +513,8 @@ body::after {
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 40px rgba(0,0,0,0.6), 0 -1px 0 rgba(0,180,255,0.15);
     z-index: 50;
-    transform: translateY(calc(100% - 52px));
-    transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+    transform: translateY(60%);
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
     overflow: hidden;
   }
   #sidebar.sheet-open {
@@ -529,6 +530,11 @@ body::after {
     user-select: none;
     -webkit-user-select: none;
     position: relative;
+    background: linear-gradient(
+    to bottom,
+    rgba(0,180,255,0.05),
+    transparent
+  );
   }
   #feed-header::before {
     content: '';
@@ -559,7 +565,7 @@ body::after {
 #mobile-alerts-btn {
   display: none;
   position: absolute;
-  bottom: 70px; right: 16px;
+  bottom: calc(80px + env(safe-area-inset-bottom)); right: 16px;
   z-index: 200;
   width: 48px; height: 48px;
   border-radius: 50%;
@@ -836,7 +842,7 @@ function openMobileSheet() {
     const dy = e.changedTouches[0].clientY - startY;
     const dt = Date.now() - startTime;
     const velocity = Math.abs(dy) / dt;
-    if (velocity > 0.3 || Math.abs(dy) > 60) {
+    if (velocity > 0.2 || Math.abs(dy) > 40) {
       if (dy > 0 && sheetOpen) {
         sheetOpen = false;
         sidebar.classList.remove('sheet-open');
