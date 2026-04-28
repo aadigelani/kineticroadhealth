@@ -30,7 +30,7 @@ logging.basicConfig(
 log = logging.getLogger("ktt-bridge")
 
 # --- Thresholds ---
-SPIKE_THRESHOLD_G   = 1.5   # Z-axis acceleration in g-force
+SPIKE_THRESHOLD_G   = 1.0   # Z-axis acceleration in g-force
 SNIPPET_WINDOW_S    = 2.0   # seconds of data to send to Gemini
 ALERT_COOLDOWN_S    = 30    # minimum seconds between alerts for the same GPS cell
 GRID_RESOLUTION_DEG = 0.001 # ~100m grid cell for deduplication
